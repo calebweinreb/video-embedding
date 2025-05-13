@@ -1,4 +1,9 @@
 """Methods for visualization of videos and video embeddings."""
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from IPython.display import HTML
+import numpy as np
+from vidio.read import OpenCVReader
 
 def play_videos(videos, rows, cols, inches=3):
     """

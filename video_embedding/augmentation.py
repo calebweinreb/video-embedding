@@ -1,4 +1,10 @@
 """Video augmentation for self-supervised learning."""
+import numpy as np
+import albumentations as A
+from scipy.ndimage import gaussian_filter1d, median_filter
+from albumentations.pytorch import ReplayCompose
+from video_embedding.preprocessing import generate_trajectory, translate
+import cv2
 
 def apply_albumentations_to_video(video_array, alb_transform):
     """

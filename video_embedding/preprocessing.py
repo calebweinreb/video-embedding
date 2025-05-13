@@ -1,5 +1,13 @@
 """Video preprocessing for augmentation."""
- 
+import numpy as np
+import cv2
+from scipy.ndimage import gaussian_filter1d, median_filter
+import random
+from albumentations.pytorch import ToTensorV2
+from albumentations import ReplayCompose
+from vidio.read import OpenCVReader
+import albumentations as A
+
 def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
     """
     Create a smooth two-dimensional random trajectory using a t-distribution.
