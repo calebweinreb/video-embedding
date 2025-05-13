@@ -7,6 +7,10 @@ def play_videos(videos, rows, cols, inches=3):
     videos: List of videos to display, each shaped as (frames, height, width, channels).
     rows: Number of rows in the grid.
     cols: Number of columns in the grid.
+    inches: Size of each subplot in inches.
+
+    Returns:
+        HTML: HTML5 video player with the specified videos.
     """
     num_videos = len(videos)
     
