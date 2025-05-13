@@ -122,3 +122,38 @@ def translate(image, shift_x, shift_y):
     M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
     translated_image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT)
     return translated_image
+
+
+class VideoAugmentator():
+    """Create class for applying consistent augmentations to a video sequence using albumentations."""
+    def __init__(
+        self,
+        duration=30,
+        crop_size=256, 
+        drift_prob=0.9,
+        gaussian_kernel=15, 
+        multiplier=10, 
+        dof=1.5,   
+    ):
+        self.duration = duration
+        self.crop_size = crop_size
+        self.drift_params = (drift_prob, dof, gaussian_kernel, multiplier)
+        
+        self.transform = A.ReplayCompose([
+            A.HorizontalFlip(p=0.5),                 # Horizontal flip
+            A.VerticalFlip(p=0.5),                   # Vertical flip
+            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=(-0.2,0.1), rotate_limit=360, p=0.8, border_mode = cv2.BORDER_REFLECT),
+            A.RandomBrightnessContrast(p=0.5),       # Adjust brightness and contrast
+            A.GaussianBlur(blur_limit=(1, 3), p=0.3), # Apply Gaussian blur
+            A.HueSaturationValue(p=0.5, hue_shift_limit=5),             # Random hue, saturation, value shifts
+            A.RandomGamma(p=0.3),                    # Random gamma adjustment
+            A.ColorJitter(p=0.3),                    # Color jittering
+            A.MotionBlur(blur_limit=7, p=0.2),       # Motion blur
+        ])        
+
+    def __call__(self, video_array):
+        video_array = random_temporal_crop(video_array, self.duration)
+        video_array = random_drift(video_array, *self.drift_params)
+        video_array = apply_albumentations_to_video(video_array, self.transform)
+        video_array = center_crop(video_array, self.crop_size)
+        return video_array
