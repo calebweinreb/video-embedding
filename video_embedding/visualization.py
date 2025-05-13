@@ -15,7 +15,6 @@ def play_videos(videos, rows, cols, inches=3):
     
     fig, axes = plt.subplots(rows, cols, figsize=(cols * inches, rows * inches))
     
-    # Flatten axes if we have multiple rows/columns
     if rows == 1:
         axes = axes.flatten() if num_videos > 1 else [axes]
     elif cols == 1:
@@ -30,11 +29,10 @@ def play_videos(videos, rows, cols, inches=3):
         im = axes[i].imshow(video[0, :, :, :], animated=True)
         ims.append(im)
     
-    # Turn off remaining unused subplots
     for i in range(num_videos, rows * cols):
         axes[i].axis('off')
     
-    plt.close(fig)  # Prevent displaying the figure twice
+    plt.close(fig)  
 
     def init():
         for i, video in enumerate(videos):
