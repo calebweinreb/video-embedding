@@ -10,6 +10,7 @@ from albumentations.pytorch import ToTensorV2
 from albumentations import ReplayCompose
 from vidio.read import OpenCVReader
     
+    
 class BarlowTwins(torch.nn.Module):
     """ 
     Barlow Twins model for self-supervised learning of video representations.
@@ -46,6 +47,7 @@ class BarlowTwins(torch.nn.Module):
         off_diag = off_diagonal(c).pow_(2).sum() #penalizes non-diagonal elements thereby reducing redundancy between features
         loss = on_diag + self.lamda * off_diag
         return loss
+
 
 class Projector(torch.nn.Module):
     """ 

@@ -31,7 +31,7 @@ def apply_albumentations_to_video(video_array, alb_transform):
 
 def center_crop(video_array, crop_size):
     """
-    Perform center crop on each frame of the video.
+    Crop a video around its center to a fixed size.
 
     Parameters:
         video_array : np.ndarray
@@ -72,12 +72,17 @@ def random_temporal_crop(video_array, duration):
 
 def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
     """
-    Introduce random camera drift to each video frame based on a given probability.
+    Augment a video with random camera drift.
     
     Args:
+        video_array (np.ndarray): Input video, 
+        drift_prob (float): Probability of applying drift.
+        dof (float): Degrees of freedom for the t-distribution.
+        gaussian_kernel (int): Smoothing kernel size.
+        multiplier (float): Scaling factor for the trajectory magnitude.
     
-
     Returns:
+        np.ndarray: Augmented video with random drift.
     """
     if np.random.uniform() < drift_prob:
         duration = video_array.shape[0]
@@ -89,7 +94,7 @@ def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
 
 def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
     """
-    Create a smooth two-dimensional random trajectory using a t-distribution.
+    Create a smooth two-dimensional random trajectory (for random camera drift).
 
     Args:
         duration (int): Number of time steps in the trajectory.
@@ -125,7 +130,7 @@ def translate(image, shift_x, shift_y):
 
 
 class VideoAugmentator():
-    """Create class for applying consistent augmentations to a video sequence using albumentations."""
+    """Applies consistent augmentations to a video sequence using albumentations."""
     def __init__(
         self,
         duration=30,
