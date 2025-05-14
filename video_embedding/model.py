@@ -10,6 +10,7 @@ from albumentations.pytorch import ToTensorV2
 from albumentations import ReplayCompose
 from vidio.read import OpenCVReader
     
+<<<<<<< HEAD
 class VideoAugmentator():
     """Create class for applying consistent augmentations to a video sequence using albumentations."""
     def __init__(
@@ -54,6 +55,9 @@ class VideoAugmentator():
         video_array = center_crop(video_array, self.crop_size)
         return video_array
 
+=======
+    
+>>>>>>> 50029a507ff19203422f6efa385453e81d2bbd28
 class BarlowTwins(torch.nn.Module):
     """ 
     Barlow Twins model for self-supervised learning of video representations.
@@ -81,7 +85,6 @@ class BarlowTwins(torch.nn.Module):
         self.encoder = torch.nn.Sequential(self.backbone, self.projector) #combines backbone and projector into one model 
         self.bn = torch.nn.BatchNorm1d(projection_dim, affine=False) #batch normalization layer used to normalize features before computing correlation matrix
 
-        
     def forward(self, x1, x2): #two augmented versions of the same input 
         z1, z2 = self.encoder(x1), self.encoder(x2) #passes both inputs through encoder
         bz = z1.shape[0]
@@ -91,6 +94,7 @@ class BarlowTwins(torch.nn.Module):
         off_diag = off_diagonal(c).pow_(2).sum() #penalizes non-diagonal elements thereby reducing redundancy between features
         loss = on_diag + self.lamda * off_diag
         return loss
+
 
 class Projector(torch.nn.Module):
     """ 
