@@ -33,10 +33,10 @@ def translate(image, shift_x, shift_y):
     Args:
         image (np.ndarray): input image, 
         shift_x (int): horizontal shift, 
-        shift_y (int): vertical shift
+        shift_y (int): vertical shift.
 
     Returns: 
-        np.ndarray: translated image
+        np.ndarray: translated image.
     """
     h, w = image.shape[:2]
     M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])

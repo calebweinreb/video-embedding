@@ -9,10 +9,11 @@ def play_videos(videos, rows, cols, inches=3):
     """
     Play multiple videos in a grid with specified rows and columns.
     
-    videos: List of videos to display, each shaped as (frames, height, width, channels).
-    rows: Number of rows in the grid.
-    cols: Number of columns in the grid.
-    inches: Size of each subplot in inches.
+    Args:
+        videos: List of videos to display, each shaped as (frames, height, width, channels),
+        rows: Number of rows in the grid,
+        cols: Number of columns in the grid,
+        inches: Size of each subplot in inches.
 
     Returns:
         HTML: HTML5 video player with the specified videos.

@@ -11,7 +11,7 @@ def apply_albumentations_to_video(video_array, alb_transform):
     Implement albumentations ReplayCompose transformation across all frames in video sequence.
   
     Args:
-        video_array (np.ndarray): Video as array of frames.
+        video_array (np.ndarray): Video as array of frames,
         alb_transform (ReplayCompose): Albumentations transform with replay capability.
 
     Returns:
@@ -32,14 +32,12 @@ def center_crop(video_array, crop_size):
     """
     Perform center crop on each frame of the video.
 
-    Parameters:
-        video_array : np.ndarray
-        An array of shape (T, H, W), where:
-          - T is the number of frames,
-          - H is the frame height,
-          - W is the frame width.
-    crop_size : int
-        The target size (in pixels) for both height and width after cropping.
+    Args:
+        video_array (np.ndarray): Video as array of frames, 
+        crop_size (int): Size of the crop.
+    
+    Note: 
+        If the video is smaller than crop_size, it will not be cropped.
 
     Returns: 
         np.ndarray: Center-cropped video.
@@ -56,7 +54,7 @@ def random_temporal_crop(video_array, duration):
     Crop video randomly along temporal axis to a fixed frame count.
 
     Args: 
-        video_array (np.ndarray): Input video, 
+        video_array (np.ndarray): Video as array of frames,
         duration (int): Target number of frames.
 
     Returns:
@@ -72,9 +70,14 @@ def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
     Introduce random camera drift to each video frame based on a given probability.
     
     Args:
+        video_array (np.ndarray): Video as array of frames,
+        drift_prob (float): Probability of applying drift,
+        dof (float): Degrees of freedom for the t-distribution,
+        gaussian_kernel (int): Smoothing kernel size,
+        multiplier (float): Scaling factor for the trajectory magnitude.
     
-
     Returns:
+        np.ndarray: Video with drift applied.
     """
     if np.random.uniform() < drift_prob:
         duration = video_array.shape[0]

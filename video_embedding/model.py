@@ -43,12 +43,11 @@ class VideoAugmentator():
     Apply temporal crop, drift, augmentations, and spatial crop.
 
     Args:
-        video_array (np.ndarray): Input video array of shape (T, H, W, C), where
-            T is the number of frames, H is height, W is width, and C is channels (assumed to be RGB).
+        video_array (np.ndarray): Video as array of frames.
 
     Returns:
-        np.ndarray: Augmented video."""
-
+        np.ndarray: Augmented video.
+    """
         video_array = random_temporal_crop(video_array, self.duration)
         video_array = random_drift(video_array, *self.drift_params)
         video_array = apply_albumentations_to_video(video_array, self.transform)
@@ -104,7 +103,6 @@ class Projector(torch.nn.Module):
 
     Returns:
         torch.nn.Module: Projector model.
-
     """
     def __init__(self, in_dim, hidden_dim=512, out_dim=128):
         super().__init__()
@@ -138,7 +136,6 @@ def off_diagonal(x):
 
     Returns:
         torch.Tensor: Off-diagonal elements of the input tensor, flattened.
-    
     """
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
     
