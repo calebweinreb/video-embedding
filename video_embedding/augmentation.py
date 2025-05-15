@@ -3,6 +3,7 @@ import numpy as np
 import albumentations as A
 from scipy.ndimage import gaussian_filter1d, median_filter
 import cv2
+from torch.utils.data import Dataset
 
 
 def apply_albumentations_to_video(video_array, alb_transform):
