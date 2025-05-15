@@ -5,7 +5,7 @@ from vidio.read import OpenCVReader
 
 def get_clip(path, start, duration=60):
     """
-    Read a video clip from a file using OpenCV.
+    Read video clip from a file using OpenCV.
     
     Args:
         path (str): Path to the video file.

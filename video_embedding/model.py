@@ -13,8 +13,7 @@ from vidio.read import OpenCVReader
     
 class BarlowTwins(torch.nn.Module):
     """ 
-    Barlow Twins model for self-supervised learning of video representations.
-    This model uses a backbone feature extractor and a projector to learn representations from augmented video sequences.
+    Barlow Twins model for self-supervised learning of video representations. This model uses a backbone feature extractor and a projector to learn representations from augmented video sequences.
 
     Args:
         backbone (torch.nn.Module): Backbone feature extractor.
@@ -86,7 +85,7 @@ class Projector(torch.nn.Module):
 
 def off_diagonal(x):
     """
-    Extracts the off-diagonal elements of a square matrix.
+    Extract the off-diagonal elements of a square matrix.
 
     Args:
         x (torch.Tensor): Input tensor of shape (n, n).
