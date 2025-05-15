@@ -2,8 +2,9 @@
 import numpy as np
 import albumentations as A
 from scipy.ndimage import gaussian_filter1d, median_filter
-from albumentations.pytorch import ReplayCompose
 import cv2
+from torch.utils.data import Dataset
+from vidio.read import OpenCVReader
 
 
 def apply_albumentations_to_video(video_array, alb_transform):
@@ -11,7 +12,7 @@ def apply_albumentations_to_video(video_array, alb_transform):
     Implement albumentations ReplayCompose transformation across all frames in video sequence.
   
     Args:
-        video_array (np.ndarray): Video as array of frames.
+        video_array (np.ndarray): Video as array of frames,
         alb_transform (ReplayCompose): Albumentations transform with replay capability.
 
     Returns:
@@ -31,16 +32,14 @@ def apply_albumentations_to_video(video_array, alb_transform):
 
 def center_crop(video_array, crop_size):
     """
-    Crop a video around its center to a fixed size.
+    Crop video around its center to a fixed size.
 
-    Parameters:
-        video_array : np.ndarray
-        An array of shape (T, H, W), where:
-          - T is the number of frames,
-          - H is the frame height,
-          - W is the frame width.
-    crop_size : int
-        The target size (in pixels) for both height and width after cropping.
+    Args:
+        video_array (np.ndarray): Video as array of frames, 
+        crop_size (int): Size of the crop.
+    
+    Note: 
+        If the video is smaller than crop_size, it will not be cropped.
 
     Returns: 
         np.ndarray: Center-cropped video.
@@ -58,7 +57,7 @@ def random_temporal_crop(video_array, duration):
     Crop video randomly along temporal axis to a fixed frame count.
 
     Args: 
-        video_array (np.ndarray): Input video, 
+        video_array (np.ndarray): Video as array of frames,
         duration (int): Target number of frames.
 
     Returns:
@@ -90,47 +89,9 @@ def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
         return np.stack([translate(im, *xy) for im,xy in zip(video_array, trajectory)])
     else:
         return video_array
-        
-
-def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
-    """
-    Create a smooth two-dimensional random trajectory (for random camera drift).
-
-    Args:
-        duration (int): Number of time steps in the trajectory.
-        dof (float): Degrees of freedom for the t-distribution.
-        gaussian_kernel (int): Smoothing kernel size.
-        multiplier (float): Scaling factor for the trajectory magnitude.
-
-    Returns:
-        np.ndarray: Integer-valued 2D trajectory of shape (duration, 2).
-    """
-    trajectory = np.random.standard_t(dof, size=(duration,2))
-    trajectory = gaussian_filter1d(trajectory, gaussian_kernel, axis=0)
-    trajectory = trajectory - trajectory.mean(0)
-    return (trajectory * multiplier).astype(int)
-
-
-def translate(image, shift_x, shift_y):
-    """
-    Apply an affine transformation to shift an image by (shift_x, shift_y).
-
-    Args:
-        image (np.ndarray): input image, 
-        shift_x (int): horizontal shift, 
-        shift_y (int): vertical shift
-
-    Returns: 
-        np.ndarray: translated image
-    """
-    h, w = image.shape[:2]
-    M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
-    translated_image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT)
-    return translated_image
-
 
 class VideoAugmentator():
-    """Applies consistent augmentations to a video sequence using albumentations."""
+    """Apply consistent augmentations to video sequence using albumentations."""
     def __init__(
         self,
         duration=30,
@@ -162,3 +123,36 @@ class VideoAugmentator():
         video_array = apply_albumentations_to_video(video_array, self.transform)
         video_array = center_crop(video_array, self.crop_size)
         return video_array
+    
+class VidioDataset(Dataset):
+    '''Load, apply augmentations to video clips, and return two augmented versions of the same clip.'''
+    def __init__(
+        self, video_paths, augmentator, clip_size, 
+        temporal_downsample=1, spatial_downsample=1
+    ):
+        self.temporal_downsample = temporal_downsample
+        self.spatial_downsample = spatial_downsample
+        self.video_paths = video_paths
+        self.augmentator = augmentator
+        self.clip_size = clip_size
+        lengths = [len(OpenCVReader(p)) for p in video_paths]
+        self.video_ixs = np.hstack([torch.ones(n-clip_size)*i for i,n in enumerate(lengths)]).astype(int)
+        self.frame_ixs = np.hstack([torch.arange(n-clip_size) for i,n in enumerate(lengths)]).astype(int)
+        
+    def __len__(self):
+        return len(self.video_ixs)
+
+    def __getitem__(self, idx):
+        video_ix = self.video_ixs[idx]
+        frame_ix = self.frame_ixs[idx]
+        reader = OpenCVReader(self.video_paths[video_ix])
+        frames = reader[frame_ix : frame_ix + self.clip_size][::self.temporal_downsample]
+
+        if self.spatial_downsample > 1:
+            fx = fy = 1./self.spatial_downsample
+            frames = [cv2.resize(frame, (0,0), fx=fx, fy=fy) for frame in frames]
+
+        frames = np.stack(frames)
+        x_one = transform_video(self.augmentator(frames))
+        x_two = transform_video(self.augmentator(frames))
+        return x_one, x_two
