@@ -6,6 +6,39 @@ import cv2
 from torch.utils.data import Dataset
 from vidio.read import OpenCVReader
 
+def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
+    """Generate a random trajectory for camera drift.
+
+    Args:
+        duration (int): Number of frames in the video.
+        dof (float): Degrees of freedom for the t-distribution.
+        gaussian_kernel (int): Size of the Gaussian kernel for smoothing.
+        multiplier (float): Scaling factor for the trajectory magnitude.
+
+    Returns:
+        np.ndarray: Random trajectory of shape (duration, 2).
+    """
+    trajectory = np.random.standard_t(dof, size=(duration,2))
+    trajectory = gaussian_filter1d(trajectory, gaussian_kernel, axis=0)
+    trajectory = trajectory - trajectory.mean(0)
+    return (trajectory * multiplier).astype(int)
+
+def translate(image, shift_x, shift_y):
+    """Translate an image by a given x and y shift.
+    
+    Args:
+        image (np.ndarray): Input image.
+        shift_x (int): Shift in x direction.
+        shift_y (int): Shift in y direction.
+        
+    Returns:
+        np.ndarray: Translated image.
+    """
+    h, w = image.shape[:2]
+    M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
+    translated_image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+    return translated_image
+
 
 def apply_albumentations_to_video(video_array, alb_transform):
     """
