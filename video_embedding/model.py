@@ -93,5 +93,6 @@ def off_diagonal(x):
     Returns:
         torch.Tensor: Off-diagonal elements of the input tensor, flattened.
     """
+    n, m = x.shape
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
     
