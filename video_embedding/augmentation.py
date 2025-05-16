@@ -5,6 +5,8 @@ from scipy.ndimage import gaussian_filter1d, median_filter
 import cv2
 from torch.utils.data import Dataset
 from vidio.read import OpenCVReader
+import torch
+from .utils import transform_video, untransform_video
 
 def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
     """Generate a random trajectory for camera drift.
