@@ -9,6 +9,12 @@ import random
 from albumentations.pytorch import ToTensorV2
 from albumentations import ReplayCompose
 from vidio.read import OpenCVReader
+from torch.utils.data import DataLoader
+import os
+import tqdm
+from typing import Optional, Dict, Tuple
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau 
     
     
 class BarlowTwins(torch.nn.Module):
@@ -96,3 +102,88 @@ def off_diagonal(x):
     n, m = x.shape
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
     
+
+def setup_optim_scheduler(
+    learner: torch.nn.Module,
+    lr: float = 1e-4,
+    scheduler_params: Optional[Dict] = None
+) -> Tuple[Optimizer, _LRScheduler]:
+    """
+    Create an Adam optimizer on learner.parameters() and
+    a ReduceLROnPlateau scheduler.
+    """
+    opt = torch.optim.Adam(learner.parameters(), lr=lr)
+    sched_kwargs = dict(mode="min", threshold=0.1)
+    if scheduler_params:
+        sched_kwargs.update(scheduler_params)
+    scheduler = ReduceLROnPlateau(opt, **sched_kwargs)
+    return opt, scheduler
+
+def train (
+    learner:torch.nn.Module,
+    model:torch.nn.Module, 
+    optimizer:torch.optim.Optimizer, 
+    scheduler:torch.optim.lr_scheduler._LRScheduler, 
+    dataloader: DataLoader, 
+    start_epoch: int, 
+    epochs:int, 
+    steps_per_epoch: int, 
+    checkpoint_dir:str, 
+    loss_log_path: str, 
+    device: str = "cuda", 
+) ->None:
+    """
+    Training loop for the Barlow Twins model.
+
+    Args:
+        learner (torch.nn.Module): Learner model returning loss.
+        model (torch.nn.Module): Backbone to extract features.
+        optimizer (torch.optim.Optimizer): Optimizer for the model.
+        scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
+        dataloader (DataLoader): DataLoader for training data.
+        start_epoch (int): Starting epoch for training.
+        epochs (int): Total number of epochs to train.
+        steps_per_epoch (int): Number of steps per epoch.
+        checkpoint_dir (str): Directory to save checkpoints.
+        loss_log_path (str): Path to save loss logs.
+        device (str, optional): Device to use for training. Defaults to "cuda".
+
+    Returns:
+        None
+    """
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
+    opt = optimizer
+    sched = scheduler
+
+    for epoch in range(start_epoch, epochs):
+        running_loss = 0.0
+        loader = iter(dataloader)
+
+        with tqdm.trange(steps_per_epoch, unit="batch") as tepoch:
+            tepoch.set_description(f"Epoch {epoch+1}/{epochs}")
+
+            for i in tepoch:
+                x_one, x_two = next(loader)
+                x_one = x_one.to(device)
+                x_two = x_two.to(device)
+
+                loss = learner(x_one, x_two)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+                running_loss += loss.item()
+                tepoch.set_postfix(loss=running_loss / (i + 1))
+
+        avg_loss = running_loss / steps_per_epoch
+
+        torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'learner_state_dict': learner.state_dict(),
+        'optimizer_state_dict': opt.state_dict(),
+        'loss': avg_loss, 
+        }, os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth"))
+    
+    scheduler.step(avg_loss)
