@@ -173,7 +173,7 @@ def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     model.load_state_dict(checkpoint['model_state_dict'])
     learner.load_state_dict(checkpoint['learner_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     epoch = checkpoint['epoch']
     return learner, scheduler, optimizer, model, epoch
 
