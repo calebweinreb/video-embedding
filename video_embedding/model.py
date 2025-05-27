@@ -102,23 +102,6 @@ def off_diagonal(x):
     """
     n, m = x.shape
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
-    
-
-def setup_optim_scheduler(
-    learner: torch.nn.Module,
-    lr: float = 1e-4,
-    scheduler_params: Optional[Dict] = None
-) -> Tuple[Optimizer, _LRScheduler]:
-    """
-    Create an Adam optimizer on learner.parameters() and
-    a ReduceLROnPlateau scheduler.
-    """
-    opt = torch.optim.Adam(learner.parameters(), lr=lr)
-    sched_kwargs = dict(mode="min", threshold=0.1)
-    if scheduler_params:
-        sched_kwargs.update(scheduler_params)
-    scheduler = ReduceLROnPlateau(opt, **sched_kwargs)
-    return opt, scheduler
 
 def train (
     learner:torch.nn.Module,
@@ -153,9 +136,6 @@ def train (
         None
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
-
-    opt = optimizer
-    sched = scheduler
 
     for epoch in range(start_epoch, epochs):
         running_loss = 0.0
