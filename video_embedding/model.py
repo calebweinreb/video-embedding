@@ -15,6 +15,7 @@ import tqdm
 from typing import Optional, Dict, Tuple
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau 
+from torchvision import models
     
     
 class BarlowTwins(torch.nn.Module):
@@ -101,23 +102,6 @@ def off_diagonal(x):
     """
     n, m = x.shape
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
-    
-
-def setup_optim_scheduler(
-    learner: torch.nn.Module,
-    lr: float = 1e-4,
-    scheduler_params: Optional[Dict] = None
-) -> Tuple[Optimizer, _LRScheduler]:
-    """
-    Create an Adam optimizer on learner.parameters() and
-    a ReduceLROnPlateau scheduler.
-    """
-    opt = torch.optim.Adam(learner.parameters(), lr=lr)
-    sched_kwargs = dict(mode="min", threshold=0.1)
-    if scheduler_params:
-        sched_kwargs.update(scheduler_params)
-    scheduler = ReduceLROnPlateau(opt, **sched_kwargs)
-    return opt, scheduler
 
 def train (
     learner:torch.nn.Module,
@@ -129,7 +113,6 @@ def train (
     epochs:int, 
     steps_per_epoch: int, 
     checkpoint_dir:str, 
-    loss_log_path: str, 
     device: str = "cuda", 
 ) ->None:
     """
@@ -142,19 +125,15 @@ def train (
         scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
         dataloader (DataLoader): DataLoader for training data.
         start_epoch (int): Starting epoch for training.
-        epochs (int): Total number of epochs to train.
+        epochs (int): Total number of epochs to train plus starting epoch. 
         steps_per_epoch (int): Number of steps per epoch.
         checkpoint_dir (str): Directory to save checkpoints.
-        loss_log_path (str): Path to save loss logs.
         device (str, optional): Device to use for training. Defaults to "cuda".
 
     Returns:
         None
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
-
-    opt = optimizer
-    sched = scheduler
 
     for epoch in range(start_epoch, epochs):
         running_loss = 0.0
@@ -183,7 +162,38 @@ def train (
         'model_state_dict': model.state_dict(),
         'learner_state_dict': learner.state_dict(),
         'optimizer_state_dict': opt.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
         'loss': avg_loss, 
         }, os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth"))
     
     scheduler.step(avg_loss)
+
+def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
+    checkpoint = torch.load(checkpoint_path)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    learner.load_state_dict(checkpoint['learner_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    epoch = checkpoint['epoch']
+    print(f"Resumed training from epoch {epoch}")
+    return learner, scheduler, optimizer, model, epoch
+
+
+def get_model(name: str = "s3d"):
+    """
+    Get a pre-trained video embedding model based on the specified name.
+
+    Args:
+        name (str): Name of the model to retrieve. Currently the only supported model is "s3d".
+
+    Returns:
+        torch.nn.Module: Pre-trained video embedding model.
+        int: Dimension of the features extracted by the model.
+    """
+    if name == "s3d":
+        model = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
+        model.classifier = torch.nn.Identity()
+        feature_size = 1024
+    else:
+        raise ValueError(f"Model {name} is not supported.")
+    return model, feature_size
