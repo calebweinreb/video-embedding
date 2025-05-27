@@ -109,10 +109,10 @@ def train (
     optimizer:torch.optim.Optimizer, 
     scheduler:torch.optim.lr_scheduler._LRScheduler, 
     dataloader: DataLoader, 
-    start_epoch: int, 
-    epochs:int, 
-    steps_per_epoch: int, 
-    checkpoint_dir:str, 
+    start_epoch:int = 0,
+    epochs:int = 1500, 
+    steps_per_epoch: int= 500, 
+    checkpoint_dir:str = 'checkpoint_directory', 
     device: str = "cuda", 
 ) ->None:
     """
@@ -175,7 +175,6 @@ def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     epoch = checkpoint['epoch']
-    print(f"Resumed training from epoch {epoch}")
     return learner, scheduler, optimizer, model, epoch
 
 
