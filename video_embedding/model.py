@@ -15,6 +15,7 @@ import tqdm
 from typing import Optional, Dict, Tuple
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau 
+from torchvision import models
     
     
 class BarlowTwins(torch.nn.Module):
@@ -187,3 +188,23 @@ def train (
         torch.save(save_dict, checkpoint_path)
 
     scheduler.step(avg_loss)
+
+
+def get_model(name: str = "s3d"):
+    """
+    Get a pre-trained video embedding model based on the specified name.
+
+    Args:
+        name (str): Name of the model to retrieve. Currently the only supported model is "s3d".
+
+    Returns:
+        torch.nn.Module: Pre-trained video embedding model.
+        int: Dimension of the features extracted by the model.
+    """
+    if name == "s3d":
+        model = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
+        model.classifier = torch.nn.Identity()
+        feature_size = 1024
+    else:
+        raise ValueError(f"Model {name} is not supported.")
+    return model, feature_size
