@@ -176,14 +176,14 @@ def train (
                 running_loss += loss.item()
                 tepoch.set_postfix(loss=running_loss / (i + 1))
 
-        avg_loss = running_loss / steps_per_epoch
+        save_dict = {
+            'epoch': epoch,
+            'model_state_dict': model.state_dict(),
+            'learner_state_dict': learner.state_dict(),
+            'optimizer_state_dict': opt.state_dict(),
+            'loss': running_loss / steps_per_epoch,
+        }
+        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth")
+        torch.save(save_dict, checkpoint_path)
 
-        torch.save({
-        'epoch': epoch,
-        'model_state_dict': model.state_dict(),
-        'learner_state_dict': learner.state_dict(),
-        'optimizer_state_dict': opt.state_dict(),
-        'loss': avg_loss, 
-        }, os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth"))
-    
     scheduler.step(avg_loss)
