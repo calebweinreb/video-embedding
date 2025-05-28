@@ -3,6 +3,7 @@ from .augmentation import *
 from .visualization import *
 from .utils import *
 from .model import *
+from .training import *
 
 
 

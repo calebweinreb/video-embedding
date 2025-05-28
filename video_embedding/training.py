@@ -58,6 +58,7 @@ def train (
     epochs:int = 1500, 
     steps_per_epoch: int= 500, 
     checkpoint_dir:str = 'checkpoint_directory', 
+    loss_log_path: str = 'loss_log.txt',
     device: str = "cuda", 
 ) ->None:
     """
@@ -79,6 +80,7 @@ def train (
         None
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
+    loss_log_path = os.path.join(checkpoint_dir, "log_loss.txt")
 
     for epoch in range(start_epoch, epochs):
         running_loss = 0.0
@@ -100,22 +102,23 @@ def train (
                 running_loss += loss.item()
                 tepoch.set_postfix(loss=running_loss / (i + 1))
 
-        save_dict = {
+        avg_loss = running_loss / steps_per_epoch
+
+        torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'learner_state_dict': learner.state_dict(),
-            'optimizer_state_dict': opt.state_dict(),
-            'loss': running_loss / steps_per_epoch,
-        }
-        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth")
-        torch.save(save_dict, checkpoint_path)
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': avg_loss,
+        },f'{checkpoint_dir}/checkpoint_{epoch+1}.pth')
+    open(loss_log_path, "a").write(f"{epoch}\t{avg_loss}\n")
 
     scheduler.step(avg_loss)
 
 def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     """
     Load model, learner, optimizer, and scheduler states from a checkpoint.
-    
+
     Args:
         checkpoint_path (str): Path to the checkpoint file.
         model (torch.nn.Module): Model to load state into.
