@@ -70,10 +70,9 @@ def train (
         scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
         dataloader (DataLoader): DataLoader for training data.
         start_epoch (int): Starting epoch for training.
-        epochs (int): Total number of epochs to train.
+        epochs (int): Total number of epochs to train plus starting epoch.
         steps_per_epoch (int): Number of steps per epoch.
         checkpoint_dir (str): Directory to save checkpoints.
-        loss_log_path (str): Path to save loss logs.
         device (str, optional): Device to use for training. Defaults to "cuda".
 
     Returns:
@@ -114,6 +113,19 @@ def train (
     scheduler.step(avg_loss)
 
 def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
+    """
+    Load model, learner, optimizer, and scheduler states from a checkpoint.
+    
+    Args:
+        checkpoint_path (str): Path to the checkpoint file.
+        model (torch.nn.Module): Model to load state into.
+        learner (torch.nn.Module): Learner to load state into.
+        optimizer (torch.optim.Optimizer): Optimizer to load state into.
+        scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler to load state into.
+
+    Returns:
+        Tuple: Learner, scheduler, optimizer, model, and the epoch number.
+    """
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
     learner.load_state_dict(checkpoint['learner_state_dict'])
