@@ -1,4 +1,4 @@
-"""Necessities for model implementation."""
+"""Core model definitions and utilities for video embedding and self-supervised learning."""
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -6,7 +6,6 @@ import albumentations as A
 import cv2
 from scipy.ndimage import gaussian_filter1d, median_filter
 import random
-from albumentations.pytorch import ToTensorV2
 from albumentations import ReplayCompose
 from vidio.read import OpenCVReader
 from torch.utils.data import DataLoader
@@ -16,7 +15,6 @@ from typing import Optional, Dict, Tuple
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau 
 from torchvision import models
-    
     
 class BarlowTwins(torch.nn.Module):
     """ 
@@ -102,80 +100,6 @@ def off_diagonal(x):
     """
     n, m = x.shape
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
-
-def train (
-    learner:torch.nn.Module,
-    model:torch.nn.Module, 
-    optimizer:torch.optim.Optimizer, 
-    scheduler:torch.optim.lr_scheduler._LRScheduler, 
-    dataloader: DataLoader, 
-    start_epoch:int = 0,
-    epochs:int = 1500, 
-    steps_per_epoch: int= 500, 
-    checkpoint_dir:str = 'checkpoint_directory', 
-    device: str = "cuda", 
-) ->None:
-    """
-    Training loop for the Barlow Twins model.
-
-    Args:
-        learner (torch.nn.Module): Learner model returning loss.
-        model (torch.nn.Module): Backbone to extract features.
-        optimizer (torch.optim.Optimizer): Optimizer for the model.
-        scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
-        dataloader (DataLoader): DataLoader for training data.
-        start_epoch (int): Starting epoch for training.
-        epochs (int): Total number of epochs to train.
-        steps_per_epoch (int): Number of steps per epoch.
-        checkpoint_dir (str): Directory to save checkpoints.
-        loss_log_path (str): Path to save loss logs.
-        device (str, optional): Device to use for training. Defaults to "cuda".
-
-    Returns:
-        None
-    """
-    os.makedirs(checkpoint_dir, exist_ok=True)
-
-    for epoch in range(start_epoch, epochs):
-        running_loss = 0.0
-        loader = iter(dataloader)
-
-        with tqdm.trange(steps_per_epoch, unit="batch") as tepoch:
-            tepoch.set_description(f"Epoch {epoch+1}/{epochs}")
-
-            for i in tepoch:
-                x_one, x_two = next(loader)
-                x_one = x_one.to(device)
-                x_two = x_two.to(device)
-
-                loss = learner(x_one, x_two)
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-
-                running_loss += loss.item()
-                tepoch.set_postfix(loss=running_loss / (i + 1))
-
-        save_dict = {
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'learner_state_dict': learner.state_dict(),
-            'optimizer_state_dict': opt.state_dict(),
-            'loss': running_loss / steps_per_epoch,
-        }
-        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_{epoch+1}.pth")
-        torch.save(save_dict, checkpoint_path)
-
-    scheduler.step(avg_loss)
-
-def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    learner.load_state_dict(checkpoint['learner_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-    epoch = checkpoint['epoch']
-    return learner, scheduler, optimizer, model, epoch
 
 
 def get_model(name: str = "s3d"):

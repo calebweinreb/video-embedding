@@ -6,7 +6,6 @@ import cv2
 from torch.utils.data import Dataset
 from vidio.read import OpenCVReader
 import torch
-from .utils import transform_video, untransform_video
 
 def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
     """Generate a random trajectory for camera drift.
@@ -158,36 +157,3 @@ class VideoAugmentator():
         video_array = apply_albumentations_to_video(video_array, self.transform)
         video_array = center_crop(video_array, self.crop_size)
         return video_array
-    
-class VidioDataset(Dataset):
-    '''Load, apply augmentations to video clips, and return two augmented versions of the same clip.'''
-    def __init__(
-        self, video_paths, augmentator, clip_size, 
-        temporal_downsample=1, spatial_downsample=1
-    ):
-        self.temporal_downsample = temporal_downsample
-        self.spatial_downsample = spatial_downsample
-        self.video_paths = video_paths
-        self.augmentator = augmentator
-        self.clip_size = clip_size
-        lengths = [len(OpenCVReader(p)) for p in video_paths]
-        self.video_ixs = np.hstack([torch.ones(n-clip_size)*i for i,n in enumerate(lengths)]).astype(int)
-        self.frame_ixs = np.hstack([torch.arange(n-clip_size) for i,n in enumerate(lengths)]).astype(int)
-        
-    def __len__(self):
-        return len(self.video_ixs)
-
-    def __getitem__(self, idx):
-        video_ix = self.video_ixs[idx]
-        frame_ix = self.frame_ixs[idx]
-        reader = OpenCVReader(self.video_paths[video_ix])
-        frames = reader[frame_ix : frame_ix + self.clip_size][::self.temporal_downsample]
-
-        if self.spatial_downsample > 1:
-            fx = fy = 1./self.spatial_downsample
-            frames = [cv2.resize(frame, (0,0), fx=fx, fy=fy) for frame in frames]
-
-        frames = np.stack(frames)
-        x_one = transform_video(self.augmentator(frames))
-        x_two = transform_video(self.augmentator(frames))
-        return x_one, x_two
