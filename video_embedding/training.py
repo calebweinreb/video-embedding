@@ -103,6 +103,7 @@ def train (
                 tepoch.set_postfix(loss=running_loss / (i + 1))
 
         avg_loss = running_loss / steps_per_epoch
+        open(loss_log_path, "a").write(f"{epoch}\t{avg_loss}\n")
 
         torch.save({
             'epoch': epoch,
@@ -110,10 +111,10 @@ def train (
             'learner_state_dict': learner.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': avg_loss,
+            'scheduler_state_dict': scheduler.state_dict()
         },f'{checkpoint_dir}/checkpoint_{epoch+1}.pth')
-    open(loss_log_path, "a").write(f"{epoch}\t{avg_loss}\n")
-
-    scheduler.step(avg_loss)
+    
+        scheduler.step(avg_loss)
 
 def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     """
