@@ -16,7 +16,7 @@ from vidio.read import OpenCVReader
 from .utils import transform_video, untransform_video
 
 class VidioDataset(Dataset):
-    '''Load, apply augmentations to video clips, and return two augmented versions of the same clip.'''
+    '''Class for loading video clips and applying augmentations.'''
     def __init__(
         self, video_paths, augmentator, clip_size, 
         temporal_downsample=1, spatial_downsample=1
@@ -62,7 +62,7 @@ def train (
     device: str = "cuda", 
 ) ->None:
     """
-    Training loop for the Barlow Twins model.
+    Trains a video embedding model using a Barlow Twins approach.
 
     Args:
         learner (torch.nn.Module): Learner model returning loss.
@@ -75,12 +75,13 @@ def train (
         steps_per_epoch (int): Number of steps per epoch.
         checkpoint_dir (str): Directory to save checkpoints.
         device (str, optional): Device to use for training. Defaults to "cuda".
-
-    Returns:
-        None
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
+
     loss_log_path = os.path.join(checkpoint_dir, "log_loss.txt")
+    if not os.path.exists(loss_log_path):
+        with open(loss_log_path, "w") as f:
+            f.write("epoch\tloss\n")
 
     for epoch in range(start_epoch, epochs):
         running_loss = 0.0
@@ -103,7 +104,8 @@ def train (
                 tepoch.set_postfix(loss=running_loss / (i + 1))
 
         avg_loss = running_loss / steps_per_epoch
-        open(loss_log_path, "a").write(f"{epoch}\t{avg_loss}\n")
+        with open(loss_log_path, "a") as f:
+            f.write(f"{epoch}\t{avg_loss}\n")
 
         torch.save({
             'epoch': epoch,
