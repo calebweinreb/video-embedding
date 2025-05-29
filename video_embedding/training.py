@@ -16,7 +16,7 @@ from vidio.read import OpenCVReader
 from .utils import transform_video, untransform_video
 
 class VidioDataset(Dataset):
-    '''Load, apply augmentations to video clips, and return two augmented versions of the same clip.'''
+    '''Class for loading video clips and applying augmentations.'''
     def __init__(
         self, video_paths, augmentator, clip_size, 
         temporal_downsample=1, spatial_downsample=1
@@ -56,13 +56,13 @@ def train (
     dataloader: DataLoader, 
     start_epoch:int = 0,
     epochs:int = 1500, 
-    steps_per_epoch: int= 500, 
+    steps_per_epoch: int = 500, 
     checkpoint_dir:str = 'checkpoint_directory', 
     loss_log_path: str = 'loss_log.txt',
     device: str = "cuda", 
 ) ->None:
     """
-    Training loop for the Barlow Twins model.
+    Trains a video embedding model using a Barlow Twins approach.
 
     Args:
         learner (torch.nn.Module): Learner model returning loss.
@@ -75,12 +75,13 @@ def train (
         steps_per_epoch (int): Number of steps per epoch.
         checkpoint_dir (str): Directory to save checkpoints.
         device (str, optional): Device to use for training. Defaults to "cuda".
-
-    Returns:
-        None
     """
     os.makedirs(checkpoint_dir, exist_ok=True)
+
     loss_log_path = os.path.join(checkpoint_dir, "log_loss.txt")
+    if not os.path.exists(loss_log_path):
+        with open(loss_log_path, "w") as f:
+            f.write("epoch\tloss\n")
 
     for epoch in range(start_epoch, epochs):
         running_loss = 0.0
@@ -103,7 +104,8 @@ def train (
                 tepoch.set_postfix(loss=running_loss / (i + 1))
 
         avg_loss = running_loss / steps_per_epoch
-        open(loss_log_path, "a").write(f"{epoch}\t{avg_loss}\n")
+        with open(loss_log_path, "a") as f:
+            f.write(f"{epoch}\t{avg_loss}\n")
 
         torch.save({
             'epoch': epoch,
@@ -128,7 +130,12 @@ def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
         scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler to load state into.
 
     Returns:
-        Tuple: Learner, scheduler, optimizer, model, and the epoch number.
+        Tuple containing
+            - learner (torch.nn.Module): Learner with loaded state.
+            - scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler with loaded state.
+            - optimizer (torch.optim.Optimizer): Optimizer with loaded state.
+            - model (torch.nn.Module): Model with loaded state.
+            - epoch (int): Epoch number from the checkpoint.
     """
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
