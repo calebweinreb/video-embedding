@@ -56,7 +56,7 @@ def train (
     dataloader: DataLoader, 
     start_epoch:int = 0,
     epochs:int = 1500, 
-    steps_per_epoch: int= 500, 
+    steps_per_epoch: int = 500, 
     checkpoint_dir:str = 'checkpoint_directory', 
     loss_log_path: str = 'loss_log.txt',
     device: str = "cuda", 
