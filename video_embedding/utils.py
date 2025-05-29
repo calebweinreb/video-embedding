@@ -18,8 +18,8 @@ def transform_video(video_array):
     - Convert to tensor
     
     Args:
-        video_array (numpy.ndarray): 4D array with shape ([B], T, H, W, C), where
-        T is the number of frames, H is height, W is width, and C is channels (assumed to be RGB).
+        video_array (numpy.ndarray): 4D or 5D array with shape ([B], T, H, W, C), where B is the 
+        batch size, T is the number of frames, H is height, W is width, and C is channels (RGB).
     
     Returns:
         torch.Tensor: Transformed video tensor with shape ([B], C, T, H, W)
@@ -42,10 +42,11 @@ def untransform_video(video_tensor):
     Inverts the transformations applied by the `transform_video` function.
 
     Args:
-        video_tensor (torch.Tensor): Transformed video tensor with shape ([B], C, T, H, W)
+        video_tensor (torch.Tensor): Transformed video tensor with shape ([B], C, T, H, W), where B 
+        is the batch size, C is channels (RGB), T is the frame count, H is height, and W is width.
 
     Returns:
-        numpy.ndarray: 4D array with shape ([B], T, H, W, C) representing the original video(s).
+        numpy.ndarray: 4D or 5D array of shape ([B], T, H, W, C) representing the original video(s).
     """
     video_array = video_tensor.numpy()
 
