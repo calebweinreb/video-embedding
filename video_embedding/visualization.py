@@ -4,6 +4,7 @@ import matplotlib.animation as animation
 from IPython.display import HTML
 import numpy as np
 from vidio.read import OpenCVReader
+import umap
 
 def play_videos(videos, rows, cols, inches=3):
     """
@@ -58,3 +59,27 @@ def play_videos(videos, rows, cols, inches=3):
     anim = animation.FuncAnimation(fig, animate, init_func=init, frames=num_frames, interval=50, blit=True)
     
     return HTML(anim.to_html5_video())
+
+def umap_function(embeddings, labels=None, n_components=20, n_neighbors=50):
+    """
+    Apply UMAP to reduce dimensionality of embeddings.
+    
+    Args:
+        embeddings: Array-like of shape (n_samples, n_features),
+        labels: Optional array-like of shape (n_samples,), used for coloring points,
+        n_components: Number of dimensions to reduce to,
+        n_neighbors: Size of local neighborhood used for manifold approximation,
+
+    Returns:
+        np.ndarray: Reduced embeddings.
+    """
+    reducer = umap.UMAP(n_components=n_components, n_neighbors=n_neighbors)
+    reduced_embeddings = reducer.fit_transform(embeddings)
+    
+    if labels is not None:
+        plt.scatter(reduced_embeddings[:, 0], reduced_embeddings[:, 1], c=labels, cmap='Spectral', s=5)
+        plt.colorbar()
+        plt.title('UMAP Projection')
+        plt.show()
+    
+    return reduced_embeddings
