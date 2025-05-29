@@ -130,7 +130,12 @@ def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
         scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler to load state into.
 
     Returns:
-        Tuple: Learner, scheduler, optimizer, model, and the epoch number.
+        Tuple containing
+            - learner (torch.nn.Module): Learner with loaded state.
+            - scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler with loaded state.
+            - optimizer (torch.optim.Optimizer): Optimizer with loaded state.
+            - model (torch.nn.Module): Model with loaded state.
+            - epoch (int): Epoch number from the checkpoint.
     """
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint['model_state_dict'])
