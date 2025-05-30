@@ -118,6 +118,7 @@ def train (
     
         scheduler.step(avg_loss)
 
+
 def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     """
     Load model, learner, optimizer, and scheduler states from a checkpoint.
