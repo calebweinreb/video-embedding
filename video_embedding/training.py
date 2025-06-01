@@ -14,6 +14,7 @@ from albumentations import ReplayCompose
 from .model import BarlowTwins, Projector, off_diagonal
 from vidio.read import OpenCVReader
 from .utils import transform_video, untransform_video
+import re
 
 class VidioDataset(Dataset):
     '''Class for loading video clips and applying augmentations.'''
@@ -145,3 +146,38 @@ def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
     epoch = checkpoint['epoch']
     return learner, scheduler, optimizer, model, epoch
+
+def save_model_info(
+    model,
+    model_dir,
+    epoch,
+    image_size: int=224,
+    duration: int=16,
+    temporal_downsample: int=2
+):
+    """
+    Save model weights and experiment parameters together in a checkpoint file.
+    
+    Args:
+        model (torch.nn.Module): Model to save.
+        checkpoint_dir (str): Directory to save files.
+        epoch (int): Current epoch (used in checkpoint filename).
+        image_size (int): Image size.
+        duration (int): Clip duration.
+        temporal_downsample (int): Temporal downsample.
+    """
+    os.makedirs(model_dir, exist_ok=True)
+    params = {
+        "image_size": image_size,
+        "duration": duration,
+        "temporal_downsample": temporal_downsample
+    }
+    
+    checkpoint_path = os.path.join(model_dir, f"model_checkpoint_{epoch}.pth")
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'training_params': params
+    }, checkpoint_path)
+    print(f"Saved model and parameters to {checkpoint_path}")
+     
