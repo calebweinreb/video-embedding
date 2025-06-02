@@ -110,13 +110,11 @@ def train (
             f.write(f"{epoch}\t{avg_loss}\n")
 
         torch.save({
-            'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'learner_state_dict': learner.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-            'loss': avg_loss,
             'scheduler_state_dict': scheduler.state_dict()
-        },f'{checkpoint_dir}/checkpoint_{epoch+1}.pth')
+        },f'{checkpoint_dir}/checkpoint_{epoch}.pth')
     
         scheduler.step(avg_loss)
 
