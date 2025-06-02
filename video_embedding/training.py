@@ -58,7 +58,7 @@ def train (
     start_epoch:int = 0,
     epochs:int = 1500, 
     steps_per_epoch: int = 500, 
-    checkpoint_dir:str = 'checkpoint_directory', 
+    checkpoint_dir:str = 'checkpoints', 
     loss_log_path: str = 'loss_log.txt',
     device: str = "cuda", 
 ) ->None:
@@ -77,9 +77,10 @@ def train (
         checkpoint_dir (str): Directory to save checkpoints.
         device (str, optional): Device to use for training. Defaults to "cuda".
     """
+    print(f"Saving checkpoints to {checkpoint_dir}")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    loss_log_path = os.path.join(checkpoint_dir, "log_loss.txt")
+    print(f"Saving losses to {loss_log_path}")
     if not os.path.exists(loss_log_path):
         with open(loss_log_path, "w") as f:
             f.write("epoch\tloss\n")
