@@ -1,4 +1,5 @@
 """Core model definitions and utilities for video embedding and self-supervised learning."""
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -13,11 +14,12 @@ import os
 import tqdm
 from typing import Optional, Dict, Tuple
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau 
+from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau
 from torchvision import models
-    
+
+
 class BarlowTwins(torch.nn.Module):
-    """ 
+    """
     Barlow Twins model for self-supervised learning of video representations. This model uses a backbone feature extractor and a projector to learn representations from augmented video sequences.
 
     Args:
@@ -29,64 +31,81 @@ class BarlowTwins(torch.nn.Module):
 
     Returns:
         torch.nn.Module: Barlow Twins model.
-    
+
     Barlow Twins
     Link: https://arxiv.org/abs/2104.02057
     Implementation: https://arxiv.org/abs/2103.03230
     """
-    def __init__(self, backbone, feature_size, projection_dim=1024, hidden_dim=1024, lamda=0.001):
+
+    def __init__(
+        self, backbone, feature_size, projection_dim=1024, hidden_dim=1024, lamda=0.001
+    ):
         super().__init__()
         self.lamda = lamda
-        self.backbone = backbone #feature extractor
-        self.projector = Projector(feature_size, hidden_dim, projection_dim) #neural network mapping extracted features into space suitable for BT loss
-        self.encoder = torch.nn.Sequential(self.backbone, self.projector) #combines backbone and projector into one model 
-        self.ln = torch.nn.LayerNorm (projection_dim, elementwise_affine=False)
+        self.backbone = backbone  # feature extractor
+        self.projector = Projector(
+            feature_size, hidden_dim, projection_dim
+        )  # neural network mapping extracted features into space suitable for BT loss
+        self.encoder = torch.nn.Sequential(
+            self.backbone, self.projector
+        )  # combines backbone and projector into one model
+        self.ln = torch.nn.LayerNorm(projection_dim, elementwise_affine=False)
 
-    def forward(self, x1, x2): #two augmented versions of the same input 
-        z1, z2 = self.encoder(x1), self.encoder(x2) #passes both inputs through encoder
+    def forward(self, x1, x2):  # two augmented versions of the same input
+        z1, z2 = self.encoder(x1), self.encoder(
+            x2
+        )  # passes both inputs through encoder
         bz = z1.shape[0]
-        c = self.ln(z1).T @ self.ln(z2) #computes cross-correlation matrix between normalized outputs
+        c = self.ln(z1).T @ self.ln(
+            z2
+        )  # computes cross-correlation matrix between normalized outputs
         c.div_(bz)
-        on_diag = torch.diagonal(c).add_(-1).pow_(2).sum() #applies BT loss; forces diagonal to be 1 causing same features to match
-        off_diag = off_diagonal(c).pow_(2).sum() #penalizes non-diagonal elements thereby reducing redundancy between features
+        on_diag = (
+            torch.diagonal(c).add_(-1).pow_(2).sum()
+        )  # applies BT loss; forces diagonal to be 1 causing same features to match
+        off_diag = (
+            off_diagonal(c).pow_(2).sum()
+        )  # penalizes non-diagonal elements thereby reducing redundancy between features
         loss = on_diag + self.lamda * off_diag
         return loss
 
 
 class Projector(torch.nn.Module):
-    """ 
+    """
     Small feedforward neural model mapping high-dimensional features from the backbone into a space where Barlow Twins loss can be applied.
 
     Args:
         in_dim (int): Input dimension.
         hidden_dim (int): Hidden dimension.
-        out_dim (int): Output dimension.    
+        out_dim (int): Output dimension.
 
     Returns:
         torch.nn.Module: Projector model.
     """
+
     def __init__(self, in_dim, hidden_dim=512, out_dim=128):
         super().__init__()
-     
+
         self.layer1 = torch.nn.Sequential(
-                    torch.nn.Linear(in_dim, hidden_dim, bias=False),
-                    torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
-                    torch.nn.ReLU(inplace=True),
-                    )
+            torch.nn.Linear(in_dim, hidden_dim, bias=False),
+            torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
+            torch.nn.ReLU(inplace=True),
+        )
         self.layer2 = torch.nn.Sequential(
-                    torch.nn.Linear(hidden_dim, hidden_dim, bias=False),
-                    torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
-                    torch.nn.ReLU(inplace=True),
-                    )
+            torch.nn.Linear(hidden_dim, hidden_dim, bias=False),
+            torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
+            torch.nn.ReLU(inplace=True),
+        )
         self.layer3 = torch.nn.Sequential(
-                    torch.nn.Linear(hidden_dim, out_dim, bias=False),
-                    )
+            torch.nn.Linear(hidden_dim, out_dim, bias=False),
+        )
+
     def forward(self, x):
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
-        return x 
-    
+        return x
+
 
 def off_diagonal(x):
     """

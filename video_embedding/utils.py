@@ -1,4 +1,5 @@
 """Transformation functions for video data."""
+
 import numpy as np
 import torch
 import cv2
@@ -16,21 +17,21 @@ def transform_video(video_array):
     - Standardize channels using hard-coded mean and std
     - Change channel order
     - Convert to tensor
-    
+
     Args:
-        video_array (numpy.ndarray): 4D or 5D array with shape ([B], T, H, W, C), where B is the 
+        video_array (numpy.ndarray): 4D or 5D array with shape ([B], T, H, W, C), where B is the
         batch size, T is the number of frames, H is height, W is width, and C is channels (RGB).
-    
+
     Returns:
         torch.Tensor: Transformed video tensor with shape ([B], C, T, H, W)
     """
-    video_array = video_array.astype(np.float32)/255
+    video_array = video_array.astype(np.float32) / 255
 
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     video_array = (video_array - mean) / std
 
-    if len(video_array.shape)==4:
+    if len(video_array.shape) == 4:
         video_array = np.transpose(video_array, (3, 0, 1, 2))
     else:
         video_array = np.transpose(video_array, (0, 4, 1, 2, 3))
@@ -42,7 +43,7 @@ def untransform_video(video_tensor):
     Inverts the transformations applied by the `transform_video` function.
 
     Args:
-        video_tensor (torch.Tensor): Transformed video tensor with shape ([B], C, T, H, W), where B 
+        video_tensor (torch.Tensor): Transformed video tensor with shape ([B], C, T, H, W), where B
         is the batch size, C is channels (RGB), T is the frame count, H is height, and W is width.
 
     Returns:
@@ -50,7 +51,7 @@ def untransform_video(video_tensor):
     """
     video_array = video_tensor.numpy()
 
-    if len(video_array.shape)==4:
+    if len(video_array.shape) == 4:
         video_array = np.transpose(video_array, (1, 2, 3, 0))
     else:
         video_array = np.transpose(video_array, (0, 2, 3, 4, 1))
