@@ -18,14 +18,14 @@ from .utils import transform_video, untransform_video
 import re
 
 
-class VidioDataset(Dataset):
+class VideoClipDataset(Dataset):
     """Class for loading video clips and applying augmentations."""
 
     def __init__(
         self,
         video_paths,
         augmentator,
-        clip_size,
+        duation,
         temporal_downsample=1,
         spatial_downsample=1,
     ):
@@ -33,13 +33,13 @@ class VidioDataset(Dataset):
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths
         self.augmentator = augmentator
-        self.clip_size = clip_size
+        self.duation = duation
         lengths = [len(OpenCVReader(p)) for p in video_paths]
         self.video_ixs = np.hstack(
-            [torch.ones(n - clip_size) * i for i, n in enumerate(lengths)]
+            [torch.ones(n - duation) * i for i, n in enumerate(lengths)]
         ).astype(int)
         self.frame_ixs = np.hstack(
-            [torch.arange(n - clip_size) for i, n in enumerate(lengths)]
+            [torch.arange(n - duation) for i, n in enumerate(lengths)]
         ).astype(int)
 
     def __len__(self):
@@ -49,7 +49,7 @@ class VidioDataset(Dataset):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
         reader = OpenCVReader(self.video_paths[video_ix])
-        frames = reader[frame_ix : frame_ix + self.clip_size][
+        frames = reader[frame_ix : frame_ix + self.duration][
             :: self.temporal_downsample
         ]
 

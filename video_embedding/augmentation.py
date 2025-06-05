@@ -128,7 +128,7 @@ def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
         return video_array
 
 
-class VideoAugmentator:
+class VideoClipAugmentator:
     """Apply consistent augmentations to video sequence using albumentations."""
 
     def __init__(
@@ -137,7 +137,7 @@ class VideoAugmentator:
         crop_size=256,
         drift_prob=0.9,
         gaussian_kernel=15,
-        multiplier=10,
+        multiplier=6,
         dof=1.5,
     ):
         self.duration = duration
