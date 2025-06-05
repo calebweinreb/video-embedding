@@ -43,29 +43,28 @@ class BarlowTwins(torch.nn.Module):
         super().__init__()
         self.lamda = lamda
         self.backbone = backbone  # feature extractor
-        self.projector = Projector(
-            feature_size, hidden_dim, projection_dim
-        )  # neural network mapping extracted features into space suitable for BT loss
-        self.encoder = torch.nn.Sequential(
-            self.backbone, self.projector
-        )  # combines backbone and projector into one model
-        self.ln = torch.nn.LayerNorm(projection_dim, elementwise_affine=False)
+
+        # neural network mapping extracted features into space suitable for BT loss
+        self.projector = Projector(feature_size, hidden_dim, projection_dim)
+
+        # combines backbone and projector into one "encoder" model
+        self.encoder = torch.nn.Sequential(self.backbone, self.projector)  
+
+        self.bn = torch.nn.BatchNorm1d(projection_dim, affine=False)
+
 
     def forward(self, x1, x2):  # two augmented versions of the same input
-        z1, z2 = self.encoder(x1), self.encoder(
-            x2
-        )  # passes both inputs through encoder
-        bz = z1.shape[0]
-        c = self.ln(z1).T @ self.ln(
-            z2
-        )  # computes cross-correlation matrix between normalized outputs
-        c.div_(bz)
-        on_diag = (
-            torch.diagonal(c).add_(-1).pow_(2).sum()
-        )  # applies BT loss; forces diagonal to be 1 causing same features to match
-        off_diag = (
-            off_diagonal(c).pow_(2).sum()
-        )  # penalizes non-diagonal elements thereby reducing redundancy between features
+        # pass both inputs through encoder
+        z1, z2 = self.encoder(x1), self.encoder(x2)  
+
+        # compute cross-correlation matrix between normalized outputs
+        c = self.bn(z1).T @ self.bn(z2) 
+        c.div_(z1.shape[0])
+
+        # apply BT loss; forces diagonal to be 1 causing same features to match
+        # penalizes non-diagonal elements thereby reducing redundancy between features
+        on_diag = (torch.diagonal(c).add_(-1).pow_(2).sum())  
+        off_diag = (off_diagonal(c).pow_(2).sum())  
         loss = on_diag + self.lamda * off_diag
         return loss
 
@@ -88,12 +87,12 @@ class Projector(torch.nn.Module):
 
         self.layer1 = torch.nn.Sequential(
             torch.nn.Linear(in_dim, hidden_dim, bias=False),
-            torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
+            torch.nn.BatchNorm1d(hidden_dim, affine=False, eps=1e-5),
             torch.nn.ReLU(inplace=True),
         )
         self.layer2 = torch.nn.Sequential(
             torch.nn.Linear(hidden_dim, hidden_dim, bias=False),
-            torch.nn.LayerNorm(hidden_dim, elementwise_affine=False),
+            torch.nn.BatchNorm1d(hidden_dim, affine=False, eps=1e-5),
             torch.nn.ReLU(inplace=True),
         )
         self.layer3 = torch.nn.Sequential(
