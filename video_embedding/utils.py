@@ -5,7 +5,7 @@ import torch
 import cv2
 from scipy.ndimage import gaussian_filter1d, median_filter
 import random
-from typing import List, Tuple
+from typing import List, Tuple, Union, Optional
 from albumentations.pytorch import ToTensorV2
 from albumentations import ReplayCompose
 from vidio.read import OpenCVReader

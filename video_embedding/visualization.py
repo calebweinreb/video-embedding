@@ -7,10 +7,11 @@ import numpy as np
 from vidio.read import OpenCVReader
 import umap
 from sklearn.decomposition import PCA
-from typing import Optional, Dict, Tuple, Union
+from typing import Optional, Dict, Tuple, Union, Iterable
 import matplotlib
 import imageio
 import tqdm
+import torch
 
 from .utils import sample_timepoints, untransform_video
 
@@ -156,7 +157,7 @@ def inspect_dataloader(
     dataloader: Union[torch.utils.data.DataLoader, Iterable],
     num_samples: int = 4,
     inches: int = 3,
-) -> Ipython.display.HTML:
+) -> HTML:
     """Visualize a batch of augmented video clip pairs from a dataloader.
 
     Args:
