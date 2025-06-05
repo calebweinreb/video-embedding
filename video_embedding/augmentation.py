@@ -148,10 +148,10 @@ class VideoClipAugmentator:
             [
                 A.HorizontalFlip(p=0.5),  # Horizontal flip
                 A.VerticalFlip(p=0.5),  # Vertical flip
-                A.ShiftScaleRotate(
-                    shift_limit=0.05,
-                    scale_limit=(-0.2, 0.1),
-                    rotate_limit=360,
+                A.Affine(
+                    translate_percent=0.05,
+                    scale=(0.8, 1.1),
+                    rotate=(-360, 360),
                     p=0.8,
                     border_mode=cv2.BORDER_REFLECT,
                 ),

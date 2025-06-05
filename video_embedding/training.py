@@ -25,7 +25,7 @@ class VideoClipDataset(Dataset):
         self,
         video_paths,
         augmentator,
-        duation,
+        duration,
         temporal_downsample=1,
         spatial_downsample=1,
     ):
@@ -33,13 +33,13 @@ class VideoClipDataset(Dataset):
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths
         self.augmentator = augmentator
-        self.duation = duation
+        self.duration = duration
         lengths = [len(OpenCVReader(p)) for p in video_paths]
         self.video_ixs = np.hstack(
-            [torch.ones(n - duation) * i for i, n in enumerate(lengths)]
+            [torch.ones(n - duration) * i for i, n in enumerate(lengths)]
         ).astype(int)
         self.frame_ixs = np.hstack(
-            [torch.arange(n - duation) for i, n in enumerate(lengths)]
+            [torch.arange(n - duration) for i, n in enumerate(lengths)]
         ).astype(int)
 
     def __len__(self):
