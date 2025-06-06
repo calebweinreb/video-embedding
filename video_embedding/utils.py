@@ -5,8 +5,6 @@ from vidio.read import OpenCVReader
 import imageio
 import tqdm
 
-from .visualization import crop_image
-
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """Normalize video clip and reformat as torch tensor
 
@@ -49,6 +47,38 @@ def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     video_array = (video_array * std) + mean
     video_array = (video_array * 255).astype(np.uint8)
     return video_array
+
+
+def crop_image(
+    image: np.ndarray, centroid: Tuple[int, int], crop_size: Union[int, Tuple[int, int]]
+) -> np.ndarray:
+    """Crop an image around a centroid.
+
+    Args:
+        image: Image to crop as array of shape ``(H, W, C)`` or ``(H, W)``.
+        centroid: Tuple of ``(x, y)`` coordinates representing the centroid around which to crop.
+        crop_size: Size of the crop. If an integer is provided, it will crop a square of that size.
+
+    Returns:
+        Cropped image as array of shape ``(H', W', C)`` or ``(H', W')``.
+    """
+    if isinstance(crop_size, tuple):
+        w, h = crop_size
+    else:
+        w, h = crop_size, crop_size
+    x, y = int(centroid[0]), int(centroid[1])
+
+    x_min = max(0, x - w // 2)
+    y_min = max(0, y - h // 2)
+    x_max = min(image.shape[1], x + w // 2)
+    y_max = min(image.shape[0], y + h // 2)
+
+    cropped = image[y_min:y_max, x_min:x_max]
+    padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
+    pad_x = max(w // 2 - x, 0)
+    pad_y = max(h // 2 - y, 0)
+    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
+    return padded
 
 
 def sample_timepoints(
