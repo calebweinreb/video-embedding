@@ -115,7 +115,7 @@ def off_diagonal(x: torch.Tensor) -> torch.Tensor:
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
-def get_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
+  def get_embedding_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
     """Get a pre-trained video embedding model based on the specified name.
 
     Args:
