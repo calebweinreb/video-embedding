@@ -1,5 +1,3 @@
-"""Training script for Barlow Twins model on video data."""
-
 import os
 import tqdm
 import cv2
@@ -12,6 +10,7 @@ from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
 from vidio.read import OpenCVReader
 from .utils import transform_video, untransform_video
+from .augmentation import VideoClipAugmentator
 
 
 class VideoClipDataset(Dataset):
@@ -19,14 +18,20 @@ class VideoClipDataset(Dataset):
 
     def __init__(
         self,
-        video_paths,
-        augmentator,
-        duration,
-        temporal_downsample=1,
-        spatial_downsample=1,
+        video_paths: list[str],
+        augmentator: VideoClipAugmentator,
+        duration: int,
+        temporal_downsample: float = 1.0,
+        spatial_downsample: float = 1.0,
     ):
-        """Initialize the dataset with a list of videos and augmentations."""
-
+        """
+        Args:
+            video_paths: List of paths to video files.
+            augmentator: VideoClipAugmentator instance for applying augmentations.
+            duration: Duration of loaded video clips prior to augmentation.
+            temporal_downsample: Factor by which to reduce time dimension (after augmentation).
+            spatial_downsample: Factor by which to reduce spatial dimensions (after augmentation).
+        """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths
@@ -41,13 +46,9 @@ class VideoClipDataset(Dataset):
         ).astype(int)
 
     def __len__(self):
-        """Return the number of possible clips."""
-
         return len(self.video_ixs)
 
     def __getitem__(self, idx):
-        """Load and augment a single clip."""
-
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
         reader = OpenCVReader(self.video_paths[video_ix])
@@ -66,43 +67,46 @@ class VideoClipDataset(Dataset):
 
 
 def train(
-    learner: torch.nn.Module,
-    model: torch.nn.Module,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler._LRScheduler,
-    dataloader: DataLoader,
-    start_epoch: int = 0,
-    epochs: int = 1500,
-    steps_per_epoch: int = 500,
-    checkpoint_dir: str = "checkpoints",
-    loss_log_path: str = "loss_log.txt",
-    device: str = "cuda",
+    learner,
+    optimizer,
+    scheduler,
+    dataloader,
+    num_epochs,
+    steps_per_epoch,
+    checkpoint_dir,
+    device,
 ) -> None:
-    """
-    Trains a video embedding model using a Barlow Twins approach.
+    """Trains a video embedding model using a Barlow Twins approach.
 
     Args:
         learner: Learner model returning loss.
-        model: Backbone to extract features.
         optimizer: Optimizer for the model.
         scheduler: Learning rate scheduler.
         dataloader: DataLoader for training data.
-        start_epoch: Starting epoch for training.
-        epochs: Total number of epochs to train plus starting epoch.
+        num_epochs: Total number of epochs to train plus starting epoch.
         steps_per_epoch: Number of steps per epoch.
         checkpoint_dir: Directory to save checkpoints.
-        loss_log_path: File path for saving the training loss curve.
         device: Device to use for training.
     """
     print(f"Saving checkpoints to {checkpoint_dir}")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
-    print(f"Saving losses to {loss_log_path}")
-    if not os.path.exists(loss_log_path):
-        with open(loss_log_path, "w") as f:
+    print(f"Saving losses to {loss_log}")
+    if not os.path.exists(loss_log):
+        with open(loss_log, "w") as f:
             f.write("epoch\tloss\n")
 
-    for epoch in range(start_epoch, epochs):
+    previous_checkpoints = glob.glob(f"{checkpoint_dir}/checkpoint_*.pth")
+    if previous_checkpoints:
+        latest_checkpoint = max(previous_checkpoints, key=lambda x: int(re.search(r"(\d+)", x).group(0)))
+        checkpoint = torch.load(latest_checkpoint, map_location=device)
+        learner.load_state_dict(checkpoint["learner_state_dict"])
+        optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+        scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+        start_epoch = checkpoint["epoch"] + 1
+        print(f"Resuming from checkpoint {latest_checkpoint}")
+
+    for epoch in range(start_epoch, num_epochs):
         running_loss = 0.0
         loader = iter(dataloader)
 
@@ -125,88 +129,15 @@ def train(
         avg_loss = running_loss / steps_per_epoch
         scheduler.step(avg_loss)
 
-        with open(loss_log_path, "a") as f:
+        with open(loss_log, "a") as f:
             f.write(f"{epoch}\t{avg_loss}\n")
 
         torch.save(
             {
                 "epoch": epoch,
-                "model_state_dict": model.state_dict(),
                 "learner_state_dict": learner.state_dict(),
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
             },
             f"{checkpoint_dir}/checkpoint_{epoch}.pth",
         )
-
-
-def load_from_checkpoint(
-    checkpoint_path: str,
-    model: torch.nn.Module,
-    learner: torch.nn.Module,
-    optimizer: Optimizer,
-    scheduler: _LRScheduler,
-) -> Tuple[torch.nn.Module, _LRScheduler, Optimizer, torch.nn.Module, int]:
-    """
-    Load model, learner, optimizer, and scheduler states from a checkpoint.
-
-    Args:
-        checkpoint_path: Path to the checkpoint file.
-        model: Model to load state into.
-        learner: Learner to load state into.
-        optimizer: Optimizer to load state into.
-        scheduler: Scheduler to load state into.
-
-    Returns:
-        Tuple containing
-            - learner with loaded state.
-            - scheduler with loaded state.
-            - optimizer with loaded state.
-            - model with loaded state.
-            - epoch number from the checkpoint.
-    """
-    checkpoint = torch.load(checkpoint_path)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    learner.load_state_dict(checkpoint["learner_state_dict"])
-    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
-    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
-    epoch = checkpoint["epoch"]
-    return learner, scheduler, optimizer, model, epoch
-
-
-def save_model_info(
-    model,
-    model_dir,
-    epoch,
-    image_size: int = 224,
-    duration: int = 16,
-    temporal_downsample: int = 2,
-):
-    """
-    Save model weights and experiment parameters together in a checkpoint file.
-
-    Args:
-        model: Model to save.
-        model_dir: Directory to save files.
-        epoch: Current epoch used in the checkpoint filename.
-        image_size: Image size.
-        duration: Clip duration.
-        temporal_downsample: Temporal downsample.
-    """
-    os.makedirs(model_dir, exist_ok=True)
-    params = {
-        "image_size": image_size,
-        "duration": duration,
-        "temporal_downsample": temporal_downsample,
-    }
-
-    checkpoint_path = os.path.join(model_dir, f"model_checkpoint_{epoch}.pth")
-    torch.save(
-        {
-            "epoch": epoch,
-            "model_state_dict": model.state_dict(),
-            "training_params": params,
-        },
-        checkpoint_path,
-    )
-    print(f"Saved model and parameters to {checkpoint_path}")

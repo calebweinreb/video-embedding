@@ -1,5 +1,3 @@
-"""Methods for visualization of videos and video embeddings."""
-
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from IPython.display import HTML

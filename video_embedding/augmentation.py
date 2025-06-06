@@ -1,5 +1,3 @@
-"""Video augmentation for self-supervised learning."""
-
 import numpy as np
 import albumentations as A
 from scipy.ndimage import gaussian_filter1d
@@ -46,8 +44,7 @@ def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
 def apply_albumentations_to_video(
     video_array: np.ndarray, alb_transform: A.ReplayCompose
 ) -> np.ndarray:
-    """
-    Implement albumentations ReplayCompose transformation across all frames in video sequence.
+    """Apply augmentations consistently to all frames of a video.
 
     Args:
         video_array: Video as array of frames.
@@ -69,8 +66,7 @@ def apply_albumentations_to_video(
 
 
 def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
-    """
-    Crop video around its center to a fixed size.
+    """Crop video around its center to a fixed size.
 
     Args:
         video_array: Video as array of frames.
@@ -91,8 +87,7 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
 
 
 def random_temporal_crop(video_array: np.ndarray, duration: int) -> np.ndarray:
-    """
-    Crop video randomly along temporal axis to a fixed frame count.
+    """Crop video randomly along temporal axis to a fixed frame count.
 
     Args:
         video_array: Video as array of frames.
@@ -114,8 +109,7 @@ def random_drift(
     gaussian_kernel: int,
     multiplier: float,
 ) -> np.ndarray:
-    """
-    Augment a video with random camera drift.
+    """Augment a video with random camera drift.
 
     Args:
         video_array: Input video.
@@ -147,8 +141,7 @@ class VideoClipAugmentator:
         multiplier=6,
         dof=1.5,
     ):
-        """Initialize the augmentator with default augmentation parameters.
-
+        """
         Args:
             duration: Number of frames to keep after cropping temporally.
             crop_size: Spatial crop size applied at the end of the pipeline.

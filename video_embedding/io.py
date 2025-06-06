@@ -1,5 +1,3 @@
-"""Video reader for self-supervised learning."""
-
 import numpy as np
 from vidio.read import OpenCVReader
 

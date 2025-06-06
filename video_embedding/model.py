@@ -1,34 +1,31 @@
-"""Core model definitions and utilities for video embedding and self-supervised learning."""
-
 import torch
 from typing import Tuple
 from torchvision import models
 
 
 class BarlowTwins(torch.nn.Module):
+    """Barlow Twins model for self-supervised learning of video representations.
+   
+    References:
+        - Paper: https://arxiv.org/abs/2103.03230
+        - Code: https://arxiv.org/abs/2104.02057
     """
-    Barlow Twins model for self-supervised learning of video representations. This model uses a backbone feature extractor and a projector to learn representations from augmented video sequences.
-
-    Args:
-        backbone: Backbone feature extractor.
-        feature_size: Size of the features extracted by the backbone.
-        projection_dim: Dimension of the projected features.
-        hidden_dim: Dimension of the hidden layer in the projector.
-        lamda: Regularization parameter for off-diagonal loss.
-
-    Returns:
-        Barlow Twins model instance.
-
-    Barlow Twins
-    Link: https://arxiv.org/abs/2104.02057
-    Implementation: https://arxiv.org/abs/2103.03230
-    """
-
     def __init__(
-        self, backbone, feature_size, projection_dim=1024, hidden_dim=1024, lamda=0.001
+        self, 
+        backbone: torch.nn.Module, 
+        feature_size: int, 
+        projection_dim: int = 1024, 
+        hidden_dim: int = 1024, 
+        lamda: float = 0.001
     ):
-        """Initialize the Barlow Twins model components."""
-
+        """
+        Args:
+            backbone: Feature extractor.
+            feature_size: Size of the features output by the backbone.
+            projection_dim: Output dimension of the projector MLP.
+            hidden_dim: Hidden layer dimension in the projector.
+            lamda: Weighting for the off-diagonal loss term.
+        """
         super().__init__()
         self.lamda = lamda
         self.backbone = backbone  # feature extractor
@@ -59,21 +56,16 @@ class BarlowTwins(torch.nn.Module):
 
 
 class Projector(torch.nn.Module):
-    """
-    Small feedforward neural model mapping high-dimensional features from the backbone into a space where Barlow Twins loss can be applied.
-
-    Args:
-        in_dim: Input dimension.
-        hidden_dim: Hidden dimension.
-        out_dim: Output dimension.
-
-    Returns:
-        Projector model.
-    """
-
-    def __init__(self, in_dim, hidden_dim=512, out_dim=128):
-        """Construct the projection head layers."""
-
+    """Maps high-dim features from backbone into a space where Barlow Twins loss can be applied."""
+    
+    def __init__(self, in_dim: int, hidden_dim: int = 512, out_dim: int = 128):
+        """
+        Args:
+            in_dim: Input dimension.
+            hidden_dim: Hidden dimension.
+            out_dim: Output dimension.
+            super().__init__()
+        """
         super().__init__()
 
         self.layer1 = torch.nn.Sequential(
@@ -100,8 +92,7 @@ class Projector(torch.nn.Module):
 
 
 def off_diagonal(x: torch.Tensor) -> torch.Tensor:
-    """
-    Extract the off-diagonal elements of a square matrix.
+    """Extract the off-diagonal elements of a square matrix.
 
     Args:
         x: Input tensor of shape ``(n, n)``.
@@ -114,8 +105,7 @@ def off_diagonal(x: torch.Tensor) -> torch.Tensor:
 
 
 def get_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
-    """
-    Get a pre-trained video embedding model based on the specified name.
+    """Get a pre-trained video embedding model based on the specified name.
 
     Args:
         name: Name of the model to retrieve. Currently the only supported model is "s3d".
