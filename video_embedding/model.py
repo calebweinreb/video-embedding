@@ -5,18 +5,19 @@ from torchvision import models
 
 class BarlowTwins(torch.nn.Module):
     """Barlow Twins model for self-supervised learning of video representations.
-   
+
     References:
         - Paper: https://arxiv.org/abs/2103.03230
         - Code: https://arxiv.org/abs/2104.02057
     """
+
     def __init__(
-        self, 
-        backbone: torch.nn.Module, 
-        feature_size: int, 
-        projection_dim: int = 1024, 
-        hidden_dim: int = 1024, 
-        lamda: float = 0.001
+        self,
+        backbone: torch.nn.Module,
+        feature_size: int,
+        projection_dim: int = 1024,
+        hidden_dim: int = 1024,
+        lamda: float = 0.001,
     ):
         """
         Args:
@@ -34,10 +35,9 @@ class BarlowTwins(torch.nn.Module):
         self.projector = Projector(feature_size, hidden_dim, projection_dim)
 
         # combines backbone and projector into one "encoder" model
-        self.encoder = torch.nn.Sequential(self.backbone, self.projector)  
+        self.encoder = torch.nn.Sequential(self.backbone, self.projector)
 
         self.bn = torch.nn.BatchNorm1d(projection_dim, affine=False)
-
 
     def forward(self, x1, x2):  # two augmented versions of the same input
         """Compute Barlow Twins loss for a pair of augmented clips."""
@@ -49,7 +49,7 @@ class BarlowTwins(torch.nn.Module):
         c = self.bn(z1).T @ self.bn(z2)
         c.div_(z1.shape[0])
 
-        on_diag = (torch.diagonal(c).add_(-1).pow_(2).sum())
+        on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = off_diagonal(c).pow_(2).sum()
         loss = on_diag + self.lamda * off_diag
         return loss
@@ -57,7 +57,7 @@ class BarlowTwins(torch.nn.Module):
 
 class Projector(torch.nn.Module):
     """Maps high-dim features from backbone into a space where Barlow Twins loss can be applied."""
-    
+
     def __init__(self, in_dim: int, hidden_dim: int = 512, out_dim: int = 128):
         """
         Args:

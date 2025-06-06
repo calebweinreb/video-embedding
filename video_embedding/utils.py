@@ -73,8 +73,12 @@ def sample_timepoints(
     p = np.array(video_lengths) + 1 - clip_size
     video_probabilities = p / np.sum(p)
 
-    video_indexes = np.random.choice(len(video_paths), size=num_samples, p=video_probabilities)
-    timepoints = [np.random.randint(0, video_lengths[i] - clip_size + 1) for i in video_indexes]
+    video_indexes = np.random.choice(
+        len(video_paths), size=num_samples, p=video_probabilities
+    )
+    timepoints = [
+        np.random.randint(0, video_lengths[i] - clip_size + 1) for i in video_indexes
+    ]
     return [(video_paths[i], t) for i, t in zip(video_indexes, timepoints)]
 
 

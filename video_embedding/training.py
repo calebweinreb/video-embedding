@@ -99,7 +99,9 @@ def train(
 
     previous_checkpoints = glob.glob(f"{checkpoint_dir}/checkpoint_*.pth")
     if previous_checkpoints:
-        latest_checkpoint = max(previous_checkpoints, key=lambda x: int(re.search(r"(\d+)", x).group(0)))
+        latest_checkpoint = max(
+            previous_checkpoints, key=lambda x: int(re.search(r"(\d+)", x).group(0))
+        )
         checkpoint = torch.load(latest_checkpoint, map_location=device)
         learner.load_state_dict(checkpoint["learner_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])

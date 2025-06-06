@@ -98,9 +98,7 @@ def crop_image(
     padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
     pad_x = max(w // 2 - x, 0)
     pad_y = max(h // 2 - y, 0)
-    padded[
-        pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]
-    ] = cropped
+    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
     return padded
 
 
@@ -138,7 +136,9 @@ def inspect_crop_sizes(
         # cropped frame
         cropped_frame = crop_image(frame, cen, outer_crop_size)
         axes[1, i].imshow(cropped_frame)
-        axes[1, i].plot(*(box * inner_crop_size + outer_crop_size / 2).T, c="b", lw=2, ls="--")
+        axes[1, i].plot(
+            *(box * inner_crop_size + outer_crop_size / 2).T, c="b", lw=2, ls="--"
+        )
 
     for ax in axes.flat:
         ax.set_facecolor("black")
@@ -168,4 +168,4 @@ def inspect_dataloader(
         )
     x_one = untransform_video(x_one)[:num_samples]
     x_two = untransform_video(x_two)[:num_samples]
-    return play_videos(np.concatenate([x_one,x_two]), 2, num_samples, inches)    
+    return play_videos(np.concatenate([x_one, x_two]), 2, num_samples, inches)
