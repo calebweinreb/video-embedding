@@ -7,7 +7,7 @@ from typing import Optional, Dict, Tuple, Union, Iterable
 import matplotlib
 import torch
 
-from .utils import sample_timepoints, untransform_video
+from .utils import sample_timepoints, untransform_video, crop_image
 
 
 def play_videos(
