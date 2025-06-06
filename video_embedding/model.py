@@ -120,7 +120,7 @@ def off_diagonal(x):
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
-def get_model(name: str = "s3d"):
+def get_embedding_model(name: str = "s3d"):
     """
     Get a pre-trained video embedding model based on the specified name.
 
