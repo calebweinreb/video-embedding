@@ -5,7 +5,7 @@ from vidio.read import OpenCVReader
 import imageio
 import tqdm
 
-from .utils import crop_image
+from .visualization import crop_image
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """Normalize video clip and reformat as torch tensor
