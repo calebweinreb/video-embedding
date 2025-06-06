@@ -2,24 +2,23 @@
 
 import numpy as np
 import albumentations as A
-from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.ndimage import gaussian_filter1d
 import cv2
-from torch.utils.data import Dataset
-from vidio.read import OpenCVReader
-import torch
 
 
-def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
+def generate_trajectory(
+    duration: int, dof: float, gaussian_kernel: int, multiplier: float
+) -> np.ndarray:
     """Generate a random trajectory for camera drift.
 
     Args:
-        duration (int): Number of frames in the video.
-        dof (float): Degrees of freedom for the t-distribution.
-        gaussian_kernel (int): Size of the Gaussian kernel for smoothing.
-        multiplier (float): Scaling factor for the trajectory magnitude.
+        duration: Number of frames in the video.
+        dof: Degrees of freedom for the t-distribution.
+        gaussian_kernel: Size of the Gaussian kernel for smoothing.
+        multiplier: Scaling factor for the trajectory magnitude.
 
     Returns:
-        np.ndarray: Random trajectory of shape (duration, 2).
+        Random trajectory of shape ``(duration, 2)``.
     """
     trajectory = np.random.standard_t(dof, size=(duration, 2))
     trajectory = gaussian_filter1d(trajectory, gaussian_kernel, axis=0)
@@ -27,16 +26,16 @@ def generate_trajectory(duration, dof, gaussian_kernel, multiplier):
     return (trajectory * multiplier).astype(int)
 
 
-def translate(image, shift_x, shift_y):
+def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
     """Translate an image by a given x and y shift.
 
     Args:
-        image (np.ndarray): Input image.
-        shift_x (int): Shift in x direction.
-        shift_y (int): Shift in y direction.
+        image: Input image.
+        shift_x: Shift in x direction.
+        shift_y: Shift in y direction.
 
     Returns:
-        np.ndarray: Translated image.
+        Translated image.
     """
     h, w = image.shape[:2]
     M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
@@ -44,16 +43,18 @@ def translate(image, shift_x, shift_y):
     return translated_image
 
 
-def apply_albumentations_to_video(video_array, alb_transform):
+def apply_albumentations_to_video(
+    video_array: np.ndarray, alb_transform: A.ReplayCompose
+) -> np.ndarray:
     """
     Implement albumentations ReplayCompose transformation across all frames in video sequence.
 
     Args:
-        video_array (np.ndarray): Video as array of frames,
-        alb_transform (ReplayCompose): Albumentations transform with replay capability.
+        video_array: Video as array of frames.
+        alb_transform: Albumentations transform with replay capability.
 
     Returns:
-        np.ndarray: Augmented video array.
+        Augmented video array.
     """
     augmented_video = np.zeros_like(video_array)
     first_frame = video_array[0]
@@ -67,19 +68,19 @@ def apply_albumentations_to_video(video_array, alb_transform):
     return augmented_video
 
 
-def center_crop(video_array, crop_size):
+def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
     """
     Crop video around its center to a fixed size.
 
     Args:
-        video_array (np.ndarray): Video as array of frames,
-        crop_size (int): Size of the crop.
+        video_array: Video as array of frames.
+        crop_size: Size of the crop.
 
     Note:
         If the video is smaller than crop_size, it will not be cropped.
 
     Returns:
-        np.ndarray: Center-cropped video.
+        Center-cropped video.
     """
     h, w = video_array.shape[1:3]
     if h > crop_size:
@@ -89,16 +90,16 @@ def center_crop(video_array, crop_size):
     return video_array
 
 
-def random_temporal_crop(video_array, duration):
+def random_temporal_crop(video_array: np.ndarray, duration: int) -> np.ndarray:
     """
     Crop video randomly along temporal axis to a fixed frame count.
 
     Args:
-        video_array (np.ndarray): Video as array of frames,
-        duration (int): Target number of frames.
+        video_array: Video as array of frames.
+        duration: Target number of frames.
 
     Returns:
-        np.ndarray: Cropped video.
+        Cropped video.
     """
     if len(video_array) > duration:
         start = np.random.randint(len(video_array) - duration)
@@ -106,19 +107,25 @@ def random_temporal_crop(video_array, duration):
     return video_array
 
 
-def random_drift(video_array, drift_prob, dof, gaussian_kernel, multiplier):
+def random_drift(
+    video_array: np.ndarray,
+    drift_prob: float,
+    dof: float,
+    gaussian_kernel: int,
+    multiplier: float,
+) -> np.ndarray:
     """
     Augment a video with random camera drift.
 
     Args:
-        video_array (np.ndarray): Input video,
-        drift_prob (float): Probability of applying drift.
-        dof (float): Degrees of freedom for the t-distribution.
-        gaussian_kernel (int): Smoothing kernel size.
-        multiplier (float): Scaling factor for the trajectory magnitude.
+        video_array: Input video.
+        drift_prob: Probability of applying drift.
+        dof: Degrees of freedom for the t-distribution.
+        gaussian_kernel: Smoothing kernel size.
+        multiplier: Scaling factor for the trajectory magnitude.
 
     Returns:
-        np.ndarray: Augmented video with random drift.
+        Augmented video with random drift.
     """
     if np.random.uniform() < drift_prob:
         duration = video_array.shape[0]
@@ -140,6 +147,16 @@ class VideoClipAugmentator:
         multiplier=6,
         dof=1.5,
     ):
+        """Initialize the augmentator with default augmentation parameters.
+
+        Args:
+            duration: Number of frames to keep after cropping temporally.
+            crop_size: Spatial crop size applied at the end of the pipeline.
+            drift_prob: Probability of applying camera drift.
+            gaussian_kernel: Gaussian smoothing kernel size for drift.
+            multiplier: Scaling factor for the drift magnitude.
+            dof: Degrees of freedom of the t-distribution used for drift.
+        """
         self.duration = duration
         self.crop_size = crop_size
         self.drift_params = (drift_prob, dof, gaussian_kernel, multiplier)
@@ -167,6 +184,8 @@ class VideoClipAugmentator:
         )
 
     def __call__(self, video_array):
+        """Apply the augmentation pipeline to a video clip."""
+
         video_array = random_temporal_crop(video_array, self.duration)
         video_array = random_drift(video_array, *self.drift_params)
         video_array = apply_albumentations_to_video(video_array, self.transform)
