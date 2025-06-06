@@ -12,7 +12,7 @@ from vidio.read import OpenCVReader
 import albumentations as A
 
 
-def transform_video(video_array):
+def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """
     - Normalize from 0-255 to 0-1
     - Standardize channels using hard-coded mean and std
@@ -20,11 +20,11 @@ def transform_video(video_array):
     - Convert to tensor
 
     Args:
-        video_array (numpy.ndarray): 4D or 5D array with shape ([B], T, H, W, C), where B is the
-        batch size, T is the number of frames, H is height, W is width, and C is channels (RGB).
+        video_array: 4D or 5D array with shape ``([B], T, H, W, C)`` where ``B``
+            is the batch size.
 
     Returns:
-        torch.Tensor: Transformed video tensor with shape ([B], C, T, H, W)
+        Transformed video tensor with shape ``([B], C, T, H, W)``.
     """
     video_array = video_array.astype(np.float32) / 255
 
@@ -39,16 +39,15 @@ def transform_video(video_array):
     return torch.from_numpy(video_array)
 
 
-def untransform_video(video_tensor):
+def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     """
     Inverts the transformations applied by the `transform_video` function.
 
     Args:
-        video_tensor (torch.Tensor): Transformed video tensor with shape ([B], C, T, H, W), where B
-        is the batch size, C is channels (RGB), T is the frame count, H is height, and W is width.
+        video_tensor: Transformed video tensor with shape ``([B], C, T, H, W)``.
 
     Returns:
-        numpy.ndarray: 4D or 5D array of shape ([B], T, H, W, C) representing the original video(s).
+        4D or 5D array of shape ``([B], T, H, W, C)`` representing the original video(s).
     """
     video_array = video_tensor.numpy()
 
@@ -67,20 +66,20 @@ def untransform_video(video_tensor):
 def sample_timepoints(
     video_paths: List[str],
     num_samples: int,
-    video_lengths: List[int] = None,
+    video_lengths: Optional[List[int]] = None,
     clip_size: int = 1,
 ) -> List[Tuple[str, int]]:
     """
     Uniformly sample timepoints (i.e. frame indexes) from an ensemble of videos.
 
     Args:
-        video_paths: List of video file paths
-        num_samples: Number of timepoints to sample
-        video_lengths: Video lengths in frames. If None, lengths will be determined from files
-        clip_size: Ensure samples are at least this distance from the end of the video
+        video_paths: List of video file paths.
+        num_samples: Number of timepoints to sample.
+        video_lengths: Video lengths in frames. If ``None``, lengths are determined from files.
+        clip_size: Ensure samples are at least this distance from the end of the video.
 
     Returns:
-        List of tuples (video_path, timepoint)
+        List of tuples ``(video_path, timepoint)``.
     """
     if video_lengths is None:
         video_lengths = [len(OpenCVReader(p)) for p in video_paths]
@@ -100,16 +99,16 @@ def crop_video(
     crop_size: Union[int, Tuple[int, int]],
     quality: int = 5,
     constrain_track: Optional[bool] = True,
-):
+) -> None:
     """Crop a video around a time-varying centroid.
 
     Args:
         video_path: Path to the input video.
         cropped_video_path: Path to save the cropped video.
-        track: Array of shape (frames, 2) containing the crop centroid (x, y) for each frame.
-        crop_size: Size of the crop. If an integer is provided, it will crop a square of that size.
-        quality: Quality of the output video (passed to imageio.get_writer).
-        constrain_track: If True, ensures the cropped area does not exceed the video boundaries.
+        track: Array of shape ``(frames, 2)`` containing the crop centroid ``(x, y)`` for each frame.
+        crop_size: Size of the crop. If an integer is provided, it crops a square of that size.
+        quality: Quality of the output video passed to ``imageio.get_writer``.
+        constrain_track: If ``True``, ensures the cropped area does not exceed the video boundaries.
     """
     reader = OpenCVReader(video_path)
 

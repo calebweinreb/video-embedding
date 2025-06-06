@@ -16,18 +16,20 @@ import torch
 from .utils import sample_timepoints, untransform_video
 
 
-def play_videos(videos, rows, cols, inches=3):
+def play_videos(
+    videos: Iterable[np.ndarray], rows: int, cols: int, inches: int = 3
+) -> HTML:
     """
     Play multiple videos in a grid with specified rows and columns.
 
     Args:
-        videos: List of videos to display, each shaped as (frames, height, width, channels),
-        rows: Number of rows in the grid,
-        cols: Number of columns in the grid,
+        videos: List of videos to display, each shaped as ``(frames, height, width, channels)``.
+        rows: Number of rows in the grid.
+        cols: Number of columns in the grid.
         inches: Size of each subplot in inches.
 
     Returns:
-        HTML: HTML5 video player with the specified videos.
+        HTML5 video player with the specified videos.
     """
     num_videos = len(videos)
 
@@ -76,19 +78,17 @@ def play_videos(videos, rows, cols, inches=3):
 
 
 def crop_image(
-    image : np.ndarray,
-    centroid : Tuple[int, int],
-    crop_size : Union[int, Tuple[int, int]]
+    image: np.ndarray, centroid: Tuple[int, int], crop_size: Union[int, Tuple[int, int]]
 ) -> np.ndarray:
     """Crop an image around a centroid.
 
     Args:
-        image: Image to crop as array of shape (H, W, C) or (H, W).
-        centroid: Tuple of (x, y) coordinates representing the centroid around which to crop.
+        image: Image to crop as array of shape ``(H, W, C)`` or ``(H, W)``.
+        centroid: Tuple of ``(x, y)`` coordinates representing the centroid around which to crop.
         crop_size: Size of the crop. If an integer is provided, it will crop a square of that size.
 
     Returns:
-        np.ndarray: Cropped image as array of shape (H', W', C) or (H', W').
+        Cropped image as array of shape ``(H', W', C)`` or ``(H', W')``.
     """
     if isinstance(crop_size, tuple):
         w, h = crop_size
@@ -123,10 +123,10 @@ def inspect_crop_sizes(
         tracks: Map from video paths to tracks containing the animal's centroid at each frame.
         inner_crop_size: Size of the inner crop.
         outer_crop_size: Size of the outer crop.
-        n_examples (optional): Number of examples to visualize. Defaults to 4.
+        n_examples: Number of examples to visualize.
 
     Returns:
-        matplotlib.figure.Figure: Figure containing the visualizations.
+        Figure containing the visualizations.
     """
     video_paths = list(tracks.keys())
     samples = sample_timepoints(video_paths, n_examples)
@@ -162,11 +162,11 @@ def inspect_dataloader(
 
     Args:
         dataloader: Dataloader or iterable yielding batched pairs of augmented video clips.
-        num_samples: Number of samples (video clip pairs) to visualize.
+        num_samples: Number of samples to visualize.
         inches: Size of each subplot in inches.
-    
+
     Returns:
-        Ipython.display.HTML: HTML5 video player displaying the video clips.
+        HTML5 video player displaying the video clips.
     """
     x_one, x_two = next(iter(dataloader))
     if x_one.shape[0] < num_samples:

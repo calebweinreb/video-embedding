@@ -80,16 +80,16 @@ def train(
     Trains a video embedding model using a Barlow Twins approach.
 
     Args:
-        learner (torch.nn.Module): Learner model returning loss.
-        model (torch.nn.Module): Backbone to extract features.
-        optimizer (torch.optim.Optimizer): Optimizer for the model.
-        scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
-        dataloader (DataLoader): DataLoader for training data.
-        start_epoch (int): Starting epoch for training.
-        epochs (int): Total number of epochs to train plus starting epoch.
-        steps_per_epoch (int): Number of steps per epoch.
-        checkpoint_dir (str): Directory to save checkpoints.
-        device (str, optional): Device to use for training. Defaults to "cuda".
+        learner: Learner model returning loss.
+        model: Backbone to extract features.
+        optimizer: Optimizer for the model.
+        scheduler: Learning rate scheduler.
+        dataloader: DataLoader for training data.
+        start_epoch: Starting epoch for training.
+        epochs: Total number of epochs to train plus starting epoch.
+        steps_per_epoch: Number of steps per epoch.
+        checkpoint_dir: Directory to save checkpoints.
+        device: Device to use for training.
     """
     print(f"Saving checkpoints to {checkpoint_dir}")
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -137,24 +137,30 @@ def train(
         )
 
 
-def load_from_checkpoint(checkpoint_path, model, learner, optimizer, scheduler):
+def load_from_checkpoint(
+    checkpoint_path: str,
+    model: torch.nn.Module,
+    learner: torch.nn.Module,
+    optimizer: Optimizer,
+    scheduler: _LRScheduler,
+) -> Tuple[torch.nn.Module, _LRScheduler, Optimizer, torch.nn.Module, int]:
     """
     Load model, learner, optimizer, and scheduler states from a checkpoint.
 
     Args:
-        checkpoint_path (str): Path to the checkpoint file.
-        model (torch.nn.Module): Model to load state into.
-        learner (torch.nn.Module): Learner to load state into.
-        optimizer (torch.optim.Optimizer): Optimizer to load state into.
-        scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler to load state into.
+        checkpoint_path: Path to the checkpoint file.
+        model: Model to load state into.
+        learner: Learner to load state into.
+        optimizer: Optimizer to load state into.
+        scheduler: Scheduler to load state into.
 
     Returns:
         Tuple containing
-            - learner (torch.nn.Module): Learner with loaded state.
-            - scheduler (torch.optim.lr_scheduler._LRScheduler): Scheduler with loaded state.
-            - optimizer (torch.optim.Optimizer): Optimizer with loaded state.
-            - model (torch.nn.Module): Model with loaded state.
-            - epoch (int): Epoch number from the checkpoint.
+            - learner with loaded state.
+            - scheduler with loaded state.
+            - optimizer with loaded state.
+            - model with loaded state.
+            - epoch number from the checkpoint.
     """
     checkpoint = torch.load(checkpoint_path)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -177,12 +183,12 @@ def save_model_info(
     Save model weights and experiment parameters together in a checkpoint file.
 
     Args:
-        model (torch.nn.Module): Model to save.
-        checkpoint_dir (str): Directory to save files.
-        epoch (int): Current epoch (used in checkpoint filename).
-        image_size (int): Image size.
-        duration (int): Clip duration.
-        temporal_downsample (int): Temporal downsample.
+        model: Model to save.
+        model_dir: Directory to save files.
+        epoch: Current epoch used in the checkpoint filename.
+        image_size: Image size.
+        duration: Clip duration.
+        temporal_downsample: Temporal downsample.
     """
     os.makedirs(model_dir, exist_ok=True)
     params = {

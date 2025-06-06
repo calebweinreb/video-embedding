@@ -9,17 +9,16 @@ from typing import List, Tuple
 import pathlib
 
 
-def get_clip(path, start, duration=60):
-    """
-    Read video clip from a file using OpenCV.
+def get_clip(path: str, start: int, duration: int = 60) -> np.ndarray:
+    """Read video clip from a file using OpenCV.
 
     Args:
-        path (str): Path to the video file.
-        start (int): Start frame index for the clip.
-        duration (int): Duration of the clip in frames.
+        path: Path to the video file.
+        start: Start frame index for the clip.
+        duration: Duration of the clip in frames.
 
     Returns:
-        np.ndarray: Video as array of frames.
+        Video as array of frames.
     """
     reader = OpenCVReader(path)
     clip = reader[start : start + duration]
