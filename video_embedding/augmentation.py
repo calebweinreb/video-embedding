@@ -49,8 +49,7 @@ def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
 def apply_albumentations_to_video(
     video_array: np.ndarray, alb_transform: A.ReplayCompose
 ) -> np.ndarray:
-    """
-    Implement albumentations ReplayCompose transformation across all frames in video sequence.
+    """Apply consistent albumentations transformation to all frames in video.
 
     Args:
         video_array: Video as array of frames.
@@ -72,8 +71,7 @@ def apply_albumentations_to_video(
 
 
 def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
-    """
-    Crop video around its center to a fixed size.
+    """Crop video around its center to a fixed size.
 
     Args:
         video_array: Video as array of frames.
@@ -94,8 +92,7 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
 
 
 def random_temporal_crop(video_array: np.ndarray, duration: int) -> np.ndarray:
-    """
-    Crop video randomly along temporal axis to a fixed frame count.
+    """Crop video randomly along temporal axis to a fixed frame count.
 
     Args:
         video_array: Video as array of frames.
@@ -117,8 +114,7 @@ def random_drift(
     gaussian_kernel: int,
     multiplier: float,
 ) -> np.ndarray:
-    """
-    Augment a video with random camera drift.
+    """Augment a video with random camera drift.
 
     Args:
         video_array: Input video.

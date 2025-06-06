@@ -76,8 +76,7 @@ def train(
     loss_log_path: str = "loss_log.txt",
     device: str = "cuda",
 ) -> None:
-    """
-    Trains a video embedding model using a Barlow Twins approach.
+    """Trains a video embedding model using a Barlow Twins approach.
 
     Args:
         learner: Learner model returning loss.
@@ -144,8 +143,7 @@ def load_from_checkpoint(
     optimizer: Optimizer,
     scheduler: _LRScheduler,
 ) -> Tuple[torch.nn.Module, _LRScheduler, Optimizer, torch.nn.Module, int]:
-    """
-    Load model, learner, optimizer, and scheduler states from a checkpoint.
+    """Load model, learner, optimizer, and scheduler states from a checkpoint.
 
     Args:
         checkpoint_path: Path to the checkpoint file.
@@ -179,8 +177,7 @@ def save_model_info(
     duration: int = 16,
     temporal_downsample: int = 2,
 ):
-    """
-    Save model weights and experiment parameters together in a checkpoint file.
+    """Save model weights and experiment parameters together in a checkpoint file.
 
     Args:
         model: Model to save.

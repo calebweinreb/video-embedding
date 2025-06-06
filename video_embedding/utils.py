@@ -13,21 +13,15 @@ import albumentations as A
 
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
-    """
-    - Normalize from 0-255 to 0-1
-    - Standardize channels using hard-coded mean and std
-    - Change channel order
-    - Convert to tensor
+    """Normalize video clip and reformat as torch tensor
 
     Args:
-        video_array: 4D or 5D array with shape ``([B], T, H, W, C)`` where ``B``
-            is the batch size.
+        video_array: 4D or 5D array of video frames with shape ``([B], T, H, W, C)``.
 
     Returns:
         Transformed video tensor with shape ``([B], C, T, H, W)``.
     """
     video_array = video_array.astype(np.float32) / 255
-
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     video_array = (video_array - mean) / std
@@ -40,8 +34,7 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
 
 
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
-    """
-    Inverts the transformations applied by the `transform_video` function.
+    """Invert the transformations applied by the `transform_video` function.
 
     Args:
         video_tensor: Transformed video tensor with shape ``([B], C, T, H, W)``.
@@ -69,8 +62,7 @@ def sample_timepoints(
     video_lengths: Optional[List[int]] = None,
     clip_size: int = 1,
 ) -> List[Tuple[str, int]]:
-    """
-    Uniformly sample timepoints (i.e. frame indexes) from an ensemble of videos.
+    """Uniformly sample timepoints (i.e. frame indexes) from an ensemble of videos.
 
     Args:
         video_paths: List of video file paths.
