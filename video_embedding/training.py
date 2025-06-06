@@ -1,5 +1,3 @@
-"""Training script for Barlow Twins model on video data."""
-
 import os
 import tqdm
 import cv2
@@ -7,16 +5,13 @@ import numpy as np
 import torch
 import glob
 from torch.utils.data import Dataset, DataLoader
-from torch import nn
-from typing import Optional, Dict, Tuple
+from typing import Tuple
 from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau
-from albumentations.pytorch import ToTensorV2
-from albumentations import ReplayCompose
+from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
 from vidio.read import OpenCVReader
 from .utils import transform_video, untransform_video
-import re
+from .augmentation import VideoClipAugmentator
 
 
 class VideoClipDataset(Dataset):
@@ -24,12 +19,20 @@ class VideoClipDataset(Dataset):
 
     def __init__(
         self,
-        video_paths,
-        augmentator,
-        duration,
-        temporal_downsample=1,
-        spatial_downsample=1,
+        video_paths: list[str],
+        augmentator: VideoClipAugmentator,
+        duration: int,
+        temporal_downsample: float = 1.0,
+        spatial_downsample: float = 1.0,
     ):
+        """
+        Args:
+            video_paths: List of paths to video files.
+            augmentator: VideoClipAugmentator instance for applying augmentations.
+            duration: Duration of loaded video clips prior to augmentation.
+            temporal_downsample: Factor by which to reduce time dimension (after augmentation).
+            spatial_downsample: Factor by which to reduce spatial dimensions (after augmentation).
+        """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths

@@ -1,16 +1,10 @@
-"""Methods for visualization of videos and video embeddings."""
-
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from IPython.display import HTML
 import numpy as np
 from vidio.read import OpenCVReader
-import umap
-from sklearn.decomposition import PCA
 from typing import Optional, Dict, Tuple, Union, Iterable
 import matplotlib
-import imageio
-import tqdm
 import torch
 
 from .utils import sample_timepoints, untransform_video

@@ -1,20 +1,5 @@
-"""Core model definitions and utilities for video embedding and self-supervised learning."""
-
-import numpy as np
 import torch
-import torch.nn.functional as F
-import albumentations as A
-import cv2
-from scipy.ndimage import gaussian_filter1d, median_filter
-import random
-from albumentations import ReplayCompose
-from vidio.read import OpenCVReader
-from torch.utils.data import DataLoader
-import os
-import tqdm
-from typing import Optional, Dict, Tuple
-from torch.optim import Optimizer
-from torch.optim.lr_scheduler import _LRScheduler, ReduceLROnPlateau
+from typing import Tuple
 from torchvision import models
 
 
@@ -55,17 +40,17 @@ class BarlowTwins(torch.nn.Module):
 
 
     def forward(self, x1, x2):  # two augmented versions of the same input
+        """Compute Barlow Twins loss for a pair of augmented clips."""
+
         # pass both inputs through encoder
-        z1, z2 = self.encoder(x1), self.encoder(x2)  
+        z1, z2 = self.encoder(x1), self.encoder(x2)
 
         # compute cross-correlation matrix between normalized outputs
-        c = self.bn(z1).T @ self.bn(z2) 
+        c = self.bn(z1).T @ self.bn(z2)
         c.div_(z1.shape[0])
 
-        # apply BT loss; forces diagonal to be 1 causing same features to match
-        # penalizes non-diagonal elements thereby reducing redundancy between features
-        on_diag = (torch.diagonal(c).add_(-1).pow_(2).sum())  
-        off_diag = (off_diagonal(c).pow_(2).sum())  
+        on_diag = (torch.diagonal(c).add_(-1).pow_(2).sum())
+        off_diag = off_diagonal(c).pow_(2).sum()
         loss = on_diag + self.lamda * off_diag
         return loss
 
@@ -81,6 +66,8 @@ class Projector(torch.nn.Module):
             out_dim: Output dimension.
             super().__init__()
         """
+        super().__init__()
+
         self.layer1 = torch.nn.Sequential(
             torch.nn.Linear(in_dim, hidden_dim, bias=False),
             torch.nn.BatchNorm1d(hidden_dim, affine=False, eps=1e-5),
@@ -96,6 +83,8 @@ class Projector(torch.nn.Module):
         )
 
     def forward(self, x):
+        """Forward pass of the projection head."""
+
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)

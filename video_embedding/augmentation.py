@@ -1,12 +1,7 @@
-"""Video augmentation for self-supervised learning."""
-
 import numpy as np
 import albumentations as A
-from scipy.ndimage import gaussian_filter1d, median_filter
+from scipy.ndimage import gaussian_filter1d
 import cv2
-from torch.utils.data import Dataset
-from vidio.read import OpenCVReader
-import torch
 
 
 def generate_trajectory(
@@ -146,6 +141,15 @@ class VideoClipAugmentator:
         multiplier=6,
         dof=1.5,
     ):
+        """
+        Args:
+            duration: Number of frames to keep after cropping temporally.
+            crop_size: Spatial crop size applied at the end of the pipeline.
+            drift_prob: Probability of applying camera drift.
+            gaussian_kernel: Gaussian smoothing kernel size for drift.
+            multiplier: Scaling factor for the drift magnitude.
+            dof: Degrees of freedom of the t-distribution used for drift.
+        """
         self.duration = duration
         self.crop_size = crop_size
         self.drift_params = (drift_prob, dof, gaussian_kernel, multiplier)
@@ -173,6 +177,8 @@ class VideoClipAugmentator:
         )
 
     def __call__(self, video_array):
+        """Apply the augmentation pipeline to a video clip."""
+
         video_array = random_temporal_crop(video_array, self.duration)
         video_array = random_drift(video_array, *self.drift_params)
         video_array = apply_albumentations_to_video(video_array, self.transform)

@@ -1,9 +1,9 @@
-"""Transformation functions for video data."""
-
 import numpy as np
 import torch
 from typing import List, Tuple, Union, Optional
 from vidio.read import OpenCVReader
+import imageio
+import tqdm
 
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
@@ -56,7 +56,7 @@ def sample_timepoints(
     video_lengths: Optional[List[int]] = None,
     clip_size: int = 1,
 ) -> List[Tuple[str, int]]:
-    """Uniformly sample timepoints (i.e. frame indexes) from an ensemble of videos.
+    """Uniformly sample frame indexes from an ensemble of videos.
 
     Args:
         video_paths: List of video file paths.
