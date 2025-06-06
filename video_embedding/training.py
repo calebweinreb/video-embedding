@@ -72,22 +72,19 @@ def train(
     num_epochs,
     steps_per_epoch,
     checkpoint_dir,
-    loss_log,
     device,
 ) -> None:
-    """
-    Trains a video embedding model using a Barlow Twins approach.
+    """Trains a video embedding model using a Barlow Twins approach.
 
     Args:
-        learner (torch.nn.Module): Learner model to train.
-        optimizer (torch.optim.Optimizer): Optimizer for training.
-        scheduler (torch.optim.lr_scheduler._LRScheduler): Learning rate scheduler.
-        dataloader (torch.utils.data.DataLoader): DataLoader providing video clip pairs.
-        num_epochs (int): Total number of epochs to train.
-        steps_per_epoch (int): Number of steps per epoch.
-        checkpoint_dir (str): Directory to save checkpoints.
-        loss_log (str): Path to save loss logs.
-        device (torch.device): Device to run the training on.
+        learner: Learner model returning loss.
+        optimizer: Optimizer for the model.
+        scheduler: Learning rate scheduler.
+        dataloader: DataLoader for training data.
+        num_epochs: Total number of epochs to train plus starting epoch.
+        steps_per_epoch: Number of steps per epoch.
+        checkpoint_dir: Directory to save checkpoints.
+        device: Device to use for training.
     """
     print(f"Saving checkpoints to {checkpoint_dir}")
     os.makedirs(checkpoint_dir, exist_ok=True)
