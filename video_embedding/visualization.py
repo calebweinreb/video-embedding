@@ -13,11 +13,10 @@ from .utils import sample_timepoints, untransform_video
 def play_videos(
     videos: Iterable[np.ndarray], rows: int, cols: int, inches: int = 3
 ) -> HTML:
-    """
-    Play multiple videos in a grid with specified rows and columns.
+    """Play videos (arranged in a grid) in a jupyter notebook.
 
     Args:
-        videos: List of videos to display, each shaped as ``(frames, height, width, channels)``.
+        videos: List of vide clips as arrays with shape ``(frames, height, width, channels)``.
         rows: Number of rows in the grid.
         cols: Number of columns in the grid.
         inches: Size of each subplot in inches.
@@ -114,7 +113,7 @@ def inspect_crop_sizes(
     """Visualize crop sizes for a random sample of frames.
 
     Args:
-        tracks: Map from video paths to tracks containing the animal's centroid at each frame.
+        tracks: Dict from video paths to tracks containing the animal's centroid at each frame.
         inner_crop_size: Size of the inner crop.
         outer_crop_size: Size of the outer crop.
         n_examples: Number of examples to visualize.

@@ -44,7 +44,7 @@ def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
 def apply_albumentations_to_video(
     video_array: np.ndarray, alb_transform: A.ReplayCompose
 ) -> np.ndarray:
-    """Apply augmentations consistently to all frames of a video.
+    """Apply consistent albumentations transformation to all frames in video.
 
     Args:
         video_array: Video as array of frames.

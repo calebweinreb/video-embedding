@@ -16,7 +16,6 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
         Transformed video tensor with shape ``([B], C, T, H, W)``.
     """
     video_array = video_array.astype(np.float32) / 255
-
     mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
     std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
     video_array = (video_array - mean) / std
