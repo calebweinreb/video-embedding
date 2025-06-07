@@ -143,5 +143,5 @@ def train(
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
             },
-            os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth"
+            os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth")
         )
