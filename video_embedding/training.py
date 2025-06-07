@@ -109,6 +109,9 @@ def train(
         scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
         start_epoch = checkpoint["epoch"] + 1
         print(f"Resuming from checkpoint {latest_checkpoint}")
+    else:
+        start_epoch = 0
+        print("Starting training from scratch")
 
     for epoch in range(start_epoch, num_epochs):
         running_loss = 0.0
