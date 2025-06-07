@@ -92,12 +92,13 @@ def train(
     print(f"Saving checkpoints to {checkpoint_dir}")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
+    loss_log = os.path.join(checkpoint_dir, "loss_log.csv")
     print(f"Saving losses to {loss_log}")
     if not os.path.exists(loss_log):
         with open(loss_log, "w") as f:
-            f.write("epoch\tloss\n")
+            f.write("epoch,loss\n")
 
-    previous_checkpoints = glob.glob(f"{checkpoint_dir}/checkpoint_*.pth")
+    previous_checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pth"))
     if previous_checkpoints:
         latest_checkpoint = max(
             previous_checkpoints, key=lambda x: int(re.search(r"(\d+)", x).group(0))
@@ -133,7 +134,7 @@ def train(
         scheduler.step(avg_loss)
 
         with open(loss_log, "a") as f:
-            f.write(f"{epoch}\t{avg_loss}\n")
+            f.write(f"{epoch},{avg_loss}\n")
 
         torch.save(
             {
@@ -142,5 +143,5 @@ def train(
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
             },
-            f"{checkpoint_dir}/checkpoint_{epoch}.pth",
+            os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth"
         )
