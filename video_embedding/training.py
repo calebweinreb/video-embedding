@@ -118,7 +118,7 @@ def train(
         loader = iter(dataloader)
 
         with tqdm.trange(steps_per_epoch, unit="batch") as tepoch:
-            tepoch.set_description(f"Epoch {epoch+1}/{epochs}")
+            tepoch.set_description(f"Epoch {epoch+1}/{num_epochs}")
 
             for i in tepoch:
                 x_one, x_two = next(loader)
