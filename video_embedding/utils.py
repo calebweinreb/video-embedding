@@ -119,7 +119,7 @@ def crop_video(
     track: np.ndarray,
     crop_size: Union[int, Tuple[int, int]],
     quality: int = 5,
-    constrain_track: Optional[bool] = True,
+    constrain_track: Optional[bool] = False,
 ) -> None:
     """Crop a video around a time-varying centroid.
 
