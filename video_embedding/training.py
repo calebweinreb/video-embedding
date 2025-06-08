@@ -3,9 +3,11 @@ import tqdm
 import cv2
 import numpy as np
 import torch
+import json
 import glob
+import re
 from torch.utils.data import Dataset, DataLoader
-from typing import Tuple
+from typing import Tuple, Union, List, Optional
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
@@ -67,6 +69,30 @@ class VideoClipDataset(Dataset):
         return x_one, x_two
 
 
+
+
+def _extract_epoch(path: str) -> int:
+    """Extract epoch from checkpoint filename."""
+    match = re.search(r"checkpoint_(\d+)\.pth", os.path.basename(path))
+    return int(match.group(1)) if match else -1  # -1 for malformed names
+
+
+def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
+    """Get path to checkpoint with the highest epoch number.
+
+    Args:
+        checkpoint_dir: Directory where checkpoints are saved.
+
+    Returns:
+        Path to the latest checkpoint file or None if no checkpoints exist.
+    """
+    checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pth"))
+    if checkpoints:
+        return max(checkpoints, key=_extract_epoch)
+    else:
+        return None
+
+
 def train(
     learner,
     optimizer,
@@ -90,7 +116,6 @@ def train(
         device: Device to use for training.
     """
     print(f"Saving checkpoints to {checkpoint_dir}")
-    os.makedirs(checkpoint_dir, exist_ok=True)
 
     loss_log = os.path.join(checkpoint_dir, "loss_log.csv")
     print(f"Saving losses to {loss_log}")
@@ -98,11 +123,8 @@ def train(
         with open(loss_log, "w") as f:
             f.write("epoch,loss\n")
 
-    previous_checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pth"))
-    if previous_checkpoints:
-        latest_checkpoint = max(
-            previous_checkpoints, key=lambda x: int(re.search(r"(\d+)", x).group(0))
-        )
+    latest_checkpoint = get_latest_checkpoint(checkpoint_dir)
+    if latest_checkpoint:
         checkpoint = torch.load(latest_checkpoint, map_location=device)
         learner.load_state_dict(checkpoint["learner_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
@@ -148,3 +170,43 @@ def train(
             },
             os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth")
         )
+
+
+def save_model_config(
+    training_run_name: str,
+    model_name: str,
+    crop_size: int,
+    duration: int,
+    temporal_downsample: float = 1.0,
+    spatial_downsample: float = 1.0,
+    overwrite: bool = False,
+) -> None:
+    """Saves configuration parameters of a video embedding model.
+
+    Args:
+        training_run_name: Directory where the model config is saved.
+        model_name: Name of the model (e.g., "s3d").
+        crop_size: Crop size used during training (before spatial downsampling).
+        duration: Clip duration used during training (before temporal downsampling).
+        temporal_downsample: Temporal downsampling factor.
+        spatial_downsample: Spatial downsampling factor.
+        overwrite: If True, overwrites existing configuration file.
+    """
+    config_path = os.path.join(training_run_name, "model_config.json")
+    os.makedirs(training_run_name, exist_ok=True)
+
+    config = {
+        "model_name": model_name,
+        "crop_size": crop_size,
+        "duration": duration,
+        "temporal_downsample": temporal_downsample,
+        "spatial_downsample": spatial_downsample,
+    }
+    if not overwrite and os.path.exists(config_path):
+        raise FileExistsError(
+            f"Configuration file {config_path} already exists. Set overwrite=True to replace it."
+        )
+    else:
+        print(f"Saving model configuration to {config_path}")
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=4)
