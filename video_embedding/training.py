@@ -68,9 +68,9 @@ class VideoClipDataset(Dataset):
         frames = downsample_video(
             frames, self.temporal_downsample, self.spatial_downsample
         )
-        x_one = transform_video(self.augmentator(frames), device=self.device)
-        x_two = transform_video(self.augmentator(frames), device=self.device)
-        return x_one, x_two
+        x_one = transform_video(self.augmentator(frames)[None], device=self.device)
+        x_two = transform_video(self.augmentator(frames)[None], device=self.device)
+        return x_one.squeeze(0), x_two.squeeze(0)
 
 
 def train(
