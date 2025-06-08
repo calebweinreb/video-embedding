@@ -14,13 +14,16 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """Normalize video clip, permute dimensions, and convert to tensor.
 
     Args:
-        video_array: array of video frames with shape (B, T, H, W, C).
+        video_array: 4D or 5D array of video frames with shape ([B], T, H, W, C).
 
     Returns:
-        [0-1] normalized tensor with shape (B, C, T, H, W).
+        4D or 5D [0-1] normalized tensor with shape ([B], C, T, H, W).
     """
     video_array = video_array.astype(np.float32) / 255.0
-    video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
+    if video_array.ndim == 4:
+        video_array = np.transpose(video_array, (0, 1, 2, 3))  # (C, T, H, W)
+    elif video_array.ndim == 5:
+        video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
     video_tensor = torch.from_numpy(video_array)
     return video_tensor
 
@@ -29,12 +32,15 @@ def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     """Invert the transformations applied by `transform_video`.
 
     Args:
-        video_tensor: [0-1] normalized tensor with shape (B, C, T, H, W)
+        video_tensor: 4D or 5D tensor with shape ([B], C, T, H, W) and values in [0, 1].
 
     Returns:
-        Array of video frames with shape (B, T, H, W, C) and values in [0, 255].
+        4D or 5D array of video frames with shape ([B], T, H, W, C) and values in [0, 255].
     """
-    video_array = video_tensor.permute(0, 2, 3, 4, 1).numpy()  # (B, T, H, W, C)
+    if video_tensor.ndim == 4:
+        video_array = video_tensor.permute(1, 2, 3, 0).numpy()
+    elif video_tensor.ndim == 5:
+        video_array = video_tensor.permute(0, 2, 3, 4, 1).numpy()
     video_array = (video_array * 255.0).astype(np.uint8)  # Convert to [0, 255]
     return video_array
 
