@@ -81,38 +81,6 @@ def crop_image(
     return padded
 
 
-def sample_timepoints(
-    video_paths: List[str],
-    num_samples: int,
-    video_lengths: Optional[List[int]] = None,
-    clip_size: int = 1,
-) -> List[Tuple[str, int]]:
-    """Uniformly sample frame indexes from an ensemble of videos.
-
-    Args:
-        video_paths: List of video file paths.
-        num_samples: Number of timepoints to sample.
-        video_lengths: Video lengths in frames. If ``None``, lengths are determined from files.
-        clip_size: Ensure samples are at least this distance from the end of the video.
-
-    Returns:
-        List of tuples ``(video_path, timepoint)``.
-    """
-    if video_lengths is None:
-        video_lengths = [len(OpenCVReader(p)) for p in video_paths]
-
-    p = np.array(video_lengths) + 1 - clip_size
-    video_probabilities = p / np.sum(p)
-
-    video_indexes = np.random.choice(
-        len(video_paths), size=num_samples, p=video_probabilities
-    )
-    timepoints = [
-        np.random.randint(0, video_lengths[i] - clip_size + 1) for i in video_indexes
-    ]
-    return [(video_paths[i], t) for i, t in zip(video_indexes, timepoints)]
-
-
 def crop_video(
     video_path: str,
     cropped_video_path: str,
@@ -149,3 +117,35 @@ def crop_video(
             cen = track[frame_ix]
             cropped_frame = crop_image(frame, cen, crop_size)
             writer.append_data(cropped_frame)
+
+
+def sample_timepoints(
+    video_paths: List[str],
+    num_samples: int,
+    video_lengths: Optional[List[int]] = None,
+    clip_size: int = 1,
+) -> List[Tuple[str, int]]:
+    """Uniformly sample frame indexes from an ensemble of videos.
+
+    Args:
+        video_paths: List of video file paths.
+        num_samples: Number of timepoints to sample.
+        video_lengths: Video lengths in frames. If ``None``, lengths are determined from files.
+        clip_size: Ensure samples are at least this distance from the end of the video.
+
+    Returns:
+        List of tuples ``(video_path, timepoint)``.
+    """
+    if video_lengths is None:
+        video_lengths = [len(OpenCVReader(p)) for p in video_paths]
+
+    p = np.array(video_lengths) + 1 - clip_size
+    video_probabilities = p / np.sum(p)
+
+    video_indexes = np.random.choice(
+        len(video_paths), size=num_samples, p=video_probabilities
+    )
+    timepoints = [
+        np.random.randint(0, video_lengths[i] - clip_size + 1) for i in video_indexes
+    ]
+    return [(video_paths[i], t) for i, t in zip(video_indexes, timepoints)]
