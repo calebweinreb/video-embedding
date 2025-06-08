@@ -4,6 +4,11 @@ from typing import List, Tuple, Union, Optional
 from vidio.read import OpenCVReader
 import imageio
 import tqdm
+import os
+import json
+import re
+import glob
+
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """Normalize video clip and reformat as torch tensor
@@ -149,3 +154,128 @@ def sample_timepoints(
         np.random.randint(0, video_lengths[i] - clip_size + 1) for i in video_indexes
     ]
     return [(video_paths[i], t) for i, t in zip(video_indexes, timepoints)]
+
+
+def save_model_config(
+    training_dir: str,
+    model_name: str,
+    crop_size: int,
+    duration: int,
+    temporal_downsample: float = 1.0,
+    spatial_downsample: float = 1.0,
+    overwrite: bool = False,
+) -> None:
+    """Saves configuration parameters of a video embedding model.
+
+    Args:
+        training_dir: Directory where the model config is saved.
+        model_name: Name of the model (e.g., "s3d").
+        crop_size: Crop size used during training (before spatial downsampling).
+        duration: Clip duration used during training (before temporal downsampling).
+        temporal_downsample: Temporal downsampling factor.
+        spatial_downsample: Spatial downsampling factor.
+        overwrite: If True, overwrites existing configuration file.
+    """
+    config_path = os.path.join(training_dir, "config.json")
+
+    config = {
+        "model_name": model_name,
+        "crop_size": crop_size,
+        "duration": duration,
+        "temporal_downsample": temporal_downsample,
+        "spatial_downsample": spatial_downsample,
+    }
+    if not overwrite and os.path.exists(config_path):
+        raise FileExistsError(
+            f"Configuration file {config_path} already exists. Set overwrite=True to replace it."
+        )
+    else:
+        print(f"Saving model configuration to {config_path}")
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=4)
+
+
+def _extract_epoch(path: str) -> int:
+    """Extract epoch from checkpoint filename."""
+    match = re.search(r"checkpoint_(\d+)\.pth", os.path.basename(path))
+    return int(match.group(1)) if match else -1  # -1 for malformed names
+
+
+def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
+    """Get path to checkpoint with the highest epoch number.
+
+    Args:
+        checkpoint_dir: Directory where checkpoints are saved.
+
+    Returns:
+        Path to the latest checkpoint file or None if no checkpoints exist.
+    """
+    checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pth"))
+    if checkpoints:
+        return max(checkpoints, key=_extract_epoch)
+    else:
+        return None
+
+
+def load_video_clip(path: str, start: int, duration: int) -> np.ndarray:
+    """Read video clip from a file using OpenCV.
+
+    Args:
+        path: Path to the video file.
+        start: Start frame index for the clip.
+        duration: Duration of the clip in frames.
+
+    Returns:
+        Video as array of frames.
+    """
+    reader = OpenCVReader(path)
+    clip = reader[start : start + duration]
+    return np.stack(clip)
+
+
+def downsample_video(
+    video_array: np.ndarray,
+    temporal_downsample: int = 1,
+    spatial_downsample: float = 1.0,
+) -> np.ndarray:
+    """Downsample a video clip temporally and spatially.
+
+    Args:
+        video_array: Video as array of frames.
+        temporal_downsample: Factor by which to downsample the temporal dimension.
+        spatial_downsample: Factor by which to downsample the spatial dimensions.
+
+    Returns:
+        Downsampled video array.
+    """
+    if temporal_downsample > 1:
+        video_array = video_array[:: int(temporal_downsample)]
+
+    if spatial_downsample > 1:
+        fx = fy = 1.0 / spatial_downsample
+        video_array = np.stack(
+            [cv2.resize(frame, (0, 0), fx=fx, fy=fy) for frame in video_array]
+        )
+
+    return video_array
+
+
+def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
+    """Crop video around its center (fast method that uses slicing).
+
+    Args:
+        video_array: Video as array of frames.
+        crop_size: Size of the crop.
+
+    Note:
+        If the video is smaller than crop_size, it will not be cropped.
+
+    Returns:
+        Center-cropped video.
+    """
+    h, w = video_array.shape[1:3]
+    if h > crop_size:
+        video_array = video_array[:, (h - crop_size) // 2 : -(h - crop_size) // 2]
+    if w > crop_size:
+        video_array = video_array[:, :, (w - crop_size) // 2 : -(w - crop_size) // 2]
+    return video_array

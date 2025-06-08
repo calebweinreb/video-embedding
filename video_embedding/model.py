@@ -1,6 +1,18 @@
 import torch
-from typing import Tuple
+from typing import Tuple, Union, Optional
 from torchvision import models
+import numpy as np
+import os
+import json
+from vidio.read import OpenCVReader
+from .augmentation import center_crop
+from .utils import (
+    transform_video,
+    get_latest_checkpoint,
+    downsample_video,
+    crop_image,
+    center_crop,
+)
 
 
 class BarlowTwins(torch.nn.Module):
@@ -120,3 +132,134 @@ def get_embedding_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
     else:
         raise ValueError(f"Model {name} is not supported.")
     return model, feature_size
+
+
+class VideoEmbedder(torch.nn.Module):
+    """Class for preprocessing and embedding video clips using a trained backbone.
+
+    The module can be instantiated directly with a backbone and preprocessing parameters or
+    constructed from a saved training run that includes a model configuration and checkpoints.
+    """
+
+    def __init__(
+        self,
+        backbone: torch.nn.Module,
+        crop_size: int,
+        duration: int,
+        temporal_downsample: float = 1.0,
+        spatial_downsample: float = 1.0,
+        device: str = "cuda",
+    ):
+        """
+        Args:
+            backbone: Trained video embedding model.
+            crop_size: Crop size to apply to input video clips (prior to spatial downsampling).
+            duration: Duration of input video clips in frames (prior to temporal downsampling).
+            temporal_downsample: Factor by which to downsample in time.
+            spatial_downsample: Factor by which to downsample spatially.
+            device: Device on which embeddings should be computed.
+        """
+        super().__init__()
+        self.backbone = backbone.to(device).eval()
+        self.crop_size = crop_size
+        self.duration = duration
+        self.temporal_downsample = temporal_downsample
+        self.spatial_downsample = spatial_downsample
+        self.device = device
+
+    @classmethod
+    def from_training_run(
+        cls,
+        training_dir: str,
+        device: str = "cuda",
+        checkpoint_path: Optional[str] = None,
+    ) -> "VideoEmbedder":
+        """Initialize VideoEmbedder from a training run by loading config and checkpoint.
+
+        Args:
+            training_dir: Directory with model config and checkpoints.
+            checkpoint_path: Specific checkpoint to load. If None, the latest checkpoint is used.
+            device: Device on which embeddings should be computed.
+
+        Returns:
+            Initialized ``VideoEmbedder``.
+        """
+        config_file = os.path.join(training_dir, "config.json")
+        with open(config_file, "r") as f:
+            cfg = json.load(f)
+
+        backbone, feature_size = get_embedding_model(cfg["model_name"])
+        if checkpoint_path is None:
+            checkpoint_dir = os.path.join(training_dir, "checkpoints")
+            checkpoint_path = get_latest_checkpoint(checkpoint_dir)
+            if checkpoint_path is None:
+                raise FileNotFoundError(f"No checkpoints found in {checkpoint_dir}")
+
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        learner = BarlowTwins(backbone, feature_size)
+        learner.load_state_dict(checkpoint["learner_state_dict"])
+        backbone = learner.backbone
+
+        return cls(
+            backbone=backbone,
+            crop_size=cfg["crop_size"],
+            duration=cfg["duration"],
+            temporal_downsample=cfg["temporal_downsample"],
+            spatial_downsample=cfg["spatial_downsample"],
+            device=device,
+        )
+
+    def preprocess(
+        self, video: np.ndarray, centroids: Optional[np.ndarray] = None
+    ) -> torch.Tensor:
+        """Preprocess a video clip prior to embedding.
+
+        Args:
+            video: Video clip as ``(T, H, W, C)`` array.
+            centroid: Centroids for cropping as (T, 2) array. If None, frames are center-cropped.
+
+        Returns:
+            Torch tensor of shape ``(1, C, T', H', W')`` ready for the backbone.
+        """
+        # check duration
+        if video.shape[0] != self.duration:
+            raise ValueError(
+                f"Video must have {self.duration} frames, but got {video.shape[0]}."
+            )
+
+        # crop
+        if video.shape[1] > self.crop_size or video.shape[2] > self.crop_size:
+            if centroids is None:
+                video = center_crop(video, self.crop_size)
+            else:
+                video = np.stack(
+                    [
+                        crop_image(frame, cen, self.crop_size)
+                        for frame, cen in zip(video, centroids)
+                    ]
+                )
+
+        # downsample
+        video = downsample_video(
+            video,
+            temporal_downsample=self.temporal_downsample,
+            spatial_downsample=self.spatial_downsample,
+        )
+
+        # transform to tensor and permute dimensions
+        return transform_video(clip)[None]
+
+    def forward(self, video: np.ndarray) -> np.ndarray:
+        """Preprocess and embed a video clip.
+
+        Args:
+            video: Video clip as ``(T, H, W, C)`` array.
+
+        Returns:
+            Feature embedding as a 1D array.
+        """
+        video_tensor = self.preprocess(video)[None]
+        with torch.no_grad():
+            video_tensor = video_tensor.to(self.device)
+            features = self.backbone(video_tensor)
+        return features.detach().cpu().numpy().flatten()

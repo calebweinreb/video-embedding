@@ -12,7 +12,13 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
 from vidio.read import OpenCVReader
-from .utils import transform_video, untransform_video
+from .utils import (
+    transform_video,
+    untransform_video,
+    get_latest_checkpoint,
+    load_video_clip,
+    downsample_video,
+)
 from .augmentation import VideoClipAugmentator
 
 
@@ -24,7 +30,7 @@ class VideoClipDataset(Dataset):
         video_paths: list[str],
         augmentator: VideoClipAugmentator,
         duration: int,
-        temporal_downsample: float = 1.0,
+        temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
     ):
         """
@@ -32,8 +38,8 @@ class VideoClipDataset(Dataset):
             video_paths: List of paths to video files.
             augmentator: VideoClipAugmentator instance for applying augmentations.
             duration: Duration of loaded video clips prior to augmentation.
-            temporal_downsample: Factor by which to reduce time dimension (after augmentation).
-            spatial_downsample: Factor by which to reduce spatial dimensions (after augmentation).
+            temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
+            spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
         """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
@@ -54,70 +60,42 @@ class VideoClipDataset(Dataset):
     def __getitem__(self, idx):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
-        reader = OpenCVReader(self.video_paths[video_ix])
-        frames = reader[frame_ix : frame_ix + self.duration][
-            :: self.temporal_downsample
-        ]
-
-        if self.spatial_downsample > 1:
-            fx = fy = 1.0 / self.spatial_downsample
-            frames = [cv2.resize(frame, (0, 0), fx=fx, fy=fy) for frame in frames]
-
-        frames = np.stack(frames)
+        frames = load_video_clip(self.video_paths[video_ix], frame_ix, self.duration)
+        frames = downsample_video(
+            frames, self.temporal_downsample, self.spatial_downsample
+        )
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
         return x_one, x_two
 
 
-
-
-def _extract_epoch(path: str) -> int:
-    """Extract epoch from checkpoint filename."""
-    match = re.search(r"checkpoint_(\d+)\.pth", os.path.basename(path))
-    return int(match.group(1)) if match else -1  # -1 for malformed names
-
-
-def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
-    """Get path to checkpoint with the highest epoch number.
-
-    Args:
-        checkpoint_dir: Directory where checkpoints are saved.
-
-    Returns:
-        Path to the latest checkpoint file or None if no checkpoints exist.
-    """
-    checkpoints = glob.glob(os.path.join(checkpoint_dir, "checkpoint_*.pth"))
-    if checkpoints:
-        return max(checkpoints, key=_extract_epoch)
-    else:
-        return None
-
-
 def train(
-    learner,
-    optimizer,
-    scheduler,
-    dataloader,
-    num_epochs,
-    steps_per_epoch,
-    checkpoint_dir,
-    device,
+    training_dir: str,
+    learner: BarlowTwins,
+    optimizer: Optimizer,
+    scheduler: _LRScheduler,
+    dataloader: DataLoader,
+    num_epochs: int,
+    steps_per_epoch: int,
+    device: str = "cuda",
 ) -> None:
     """Trains a video embedding model using a Barlow Twins approach.
 
     Args:
+        training_dir: Directory where checkpoints and loss log are saved.
         learner: Learner model returning loss.
         optimizer: Optimizer for the model.
         scheduler: Learning rate scheduler.
         dataloader: DataLoader for training data.
-        num_epochs: Total number of epochs to train plus starting epoch.
+        num_epochs: Total number of epochs to train.
         steps_per_epoch: Number of steps per epoch.
-        checkpoint_dir: Directory to save checkpoints.
         device: Device to use for training.
     """
+    checkpoint_dir = os.path.join(training_dir, "checkpoints")
+    os.makedirs(checkpoint_dir, exist_ok=True)
     print(f"Saving checkpoints to {checkpoint_dir}")
 
-    loss_log = os.path.join(checkpoint_dir, "loss_log.csv")
+    loss_log = os.path.join(training_dir, "loss_log.csv")
     print(f"Saving losses to {loss_log}")
     if not os.path.exists(loss_log):
         with open(loss_log, "w") as f:
@@ -133,7 +111,6 @@ def train(
         print(f"Resuming from checkpoint {latest_checkpoint}")
     else:
         start_epoch = 0
-        print("Starting training from scratch")
 
     for epoch in range(start_epoch, num_epochs):
         running_loss = 0.0
@@ -168,45 +145,5 @@ def train(
                 "optimizer_state_dict": optimizer.state_dict(),
                 "scheduler_state_dict": scheduler.state_dict(),
             },
-            os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth")
+            os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth"),
         )
-
-
-def save_model_config(
-    training_run_name: str,
-    model_name: str,
-    crop_size: int,
-    duration: int,
-    temporal_downsample: float = 1.0,
-    spatial_downsample: float = 1.0,
-    overwrite: bool = False,
-) -> None:
-    """Saves configuration parameters of a video embedding model.
-
-    Args:
-        training_run_name: Directory where the model config is saved.
-        model_name: Name of the model (e.g., "s3d").
-        crop_size: Crop size used during training (before spatial downsampling).
-        duration: Clip duration used during training (before temporal downsampling).
-        temporal_downsample: Temporal downsampling factor.
-        spatial_downsample: Spatial downsampling factor.
-        overwrite: If True, overwrites existing configuration file.
-    """
-    config_path = os.path.join(training_run_name, "model_config.json")
-    os.makedirs(training_run_name, exist_ok=True)
-
-    config = {
-        "model_name": model_name,
-        "crop_size": crop_size,
-        "duration": duration,
-        "temporal_downsample": temporal_downsample,
-        "spatial_downsample": spatial_downsample,
-    }
-    if not overwrite and os.path.exists(config_path):
-        raise FileExistsError(
-            f"Configuration file {config_path} already exists. Set overwrite=True to replace it."
-        )
-    else:
-        print(f"Saving model configuration to {config_path}")
-        with open(config_path, "w") as f:
-            json.dump(config, f, indent=4)

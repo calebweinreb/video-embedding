@@ -69,6 +69,7 @@ def play_videos(
 
     return HTML(anim.to_html5_video())
 
+
 def inspect_crop_sizes(
     tracks: Dict[str, np.ndarray],
     inner_crop_size: int,

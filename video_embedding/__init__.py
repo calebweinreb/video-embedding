@@ -1,4 +1,3 @@
-from .io import *
 from .augmentation import *
 from .visualization import *
 from .utils import *

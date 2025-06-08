@@ -2,6 +2,7 @@ import numpy as np
 import albumentations as A
 from scipy.ndimage import gaussian_filter1d
 import cv2
+from .utils import center_crop
 
 
 def generate_trajectory(
@@ -63,27 +64,6 @@ def apply_albumentations_to_video(
         augmented = A.ReplayCompose.replay(replay_data, image=frame)
         augmented_video[i] = augmented["image"]
     return augmented_video
-
-
-def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
-    """Crop video around its center to a fixed size.
-
-    Args:
-        video_array: Video as array of frames.
-        crop_size: Size of the crop.
-
-    Note:
-        If the video is smaller than crop_size, it will not be cropped.
-
-    Returns:
-        Center-cropped video.
-    """
-    h, w = video_array.shape[1:3]
-    if h > crop_size:
-        video_array = video_array[:, (h - crop_size) // 2 : -(h - crop_size) // 2]
-    if w > crop_size:
-        video_array = video_array[:, :, (w - crop_size) // 2 : -(w - crop_size) // 2]
-    return video_array
 
 
 def random_temporal_crop(video_array: np.ndarray, duration: int) -> np.ndarray:
@@ -178,7 +158,6 @@ class VideoClipAugmentator:
 
     def __call__(self, video_array):
         """Apply the augmentation pipeline to a video clip."""
-
         video_array = random_temporal_crop(video_array, self.duration)
         video_array = random_drift(video_array, *self.drift_params)
         video_array = apply_albumentations_to_video(video_array, self.transform)
