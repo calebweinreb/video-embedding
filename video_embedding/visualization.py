@@ -7,7 +7,7 @@ from typing import Optional, Dict, Tuple, Union, Iterable
 import matplotlib
 import torch
 
-from .utils import sample_timepoints, untransform_video, crop_image
+from .utils import sample_video_clips, untransform_video, crop_image
 
 
 def play_videos(
@@ -88,7 +88,7 @@ def inspect_crop_sizes(
         Figure containing the visualizations.
     """
     video_paths = list(tracks.keys())
-    samples = sample_timepoints(video_paths, n_examples)
+    samples = sample_video_clips(video_paths, n_examples)
     box = np.array([[-1, -1, 1, 1, -1], [-1, 1, 1, -1, -1]]).T / 2
 
     fig, axes = plt.subplots(2, n_examples, sharey="row")
