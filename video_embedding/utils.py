@@ -21,7 +21,7 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """
     video_array = video_array.astype(np.float32) / 255.0
     if video_array.ndim == 4:
-        video_array = np.transpose(video_array, (0, 1, 2, 3))  # (C, T, H, W)
+        video_array = np.transpose(video_array, (3, 0, 1, 2))  # (C, T, H, W)
     elif video_array.ndim == 5:
         video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
     video_tensor = torch.from_numpy(video_array)

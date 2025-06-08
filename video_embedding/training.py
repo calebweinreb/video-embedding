@@ -70,7 +70,7 @@ class VideoClipDataset(Dataset):
         )
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
-        return x_one.squeeze(0), x_two.squeeze(0)
+        return x_one, x_two
 
 
 def train(
