@@ -5,7 +5,6 @@ import numpy as np
 import os
 import json
 from vidio.read import OpenCVReader
-from .augmentation import center_crop
 from .utils import (
     transform_video,
     get_latest_checkpoint,
@@ -247,7 +246,7 @@ class VideoEmbedder(torch.nn.Module):
         )
 
         # transform to tensor and permute dimensions
-        return transform_video(clip)[None]
+        return transform_video(video[None], device=self.device)
 
     def forward(self, video: np.ndarray) -> np.ndarray:
         """Preprocess and embed a video clip.
@@ -258,8 +257,7 @@ class VideoEmbedder(torch.nn.Module):
         Returns:
             Feature embedding as a 1D array.
         """
-        video_tensor = self.preprocess(video)[None]
         with torch.no_grad():
-            video_tensor = video_tensor.to(self.device)
+            video_tensor = self.preprocess(video)
             features = self.backbone(video_tensor)
         return features.detach().cpu().numpy().flatten()

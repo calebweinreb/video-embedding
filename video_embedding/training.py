@@ -32,6 +32,7 @@ class VideoClipDataset(Dataset):
         duration: int,
         temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
+        device: str = "cuda",
     ):
         """
         Args:
@@ -40,12 +41,15 @@ class VideoClipDataset(Dataset):
             duration: Duration of loaded video clips prior to augmentation.
             temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
             spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
+            device: Device on which the dataset will be used.
         """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths
         self.augmentator = augmentator
         self.duration = duration
+        self.device = device
+
         lengths = [len(OpenCVReader(p)) for p in video_paths]
         self.video_ixs = np.hstack(
             [torch.ones(n - duration) * i for i, n in enumerate(lengths)]
@@ -64,8 +68,8 @@ class VideoClipDataset(Dataset):
         frames = downsample_video(
             frames, self.temporal_downsample, self.spatial_downsample
         )
-        x_one = transform_video(self.augmentator(frames))
-        x_two = transform_video(self.augmentator(frames))
+        x_one = transform_video(self.augmentator(frames), device=self.device)
+        x_two = transform_video(self.augmentator(frames), device=self.device)
         return x_one, x_two
 
 
