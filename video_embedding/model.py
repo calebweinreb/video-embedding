@@ -115,21 +115,47 @@ def off_diagonal(x: torch.Tensor) -> torch.Tensor:
     return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
 
+class NormalizeInput(torch.nn.Module):
+    def __init__(self, mean, std):
+        super().__init__()
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
+
+    def forward(self, x):
+        return (x - self.mean) / self.std
+
+
 def get_embedding_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
     """Get a pre-trained video embedding model based on the specified name.
 
+    Note: inputs should be [0, 1] normalized RGB tensors of shape (B, C, T, H, W).
+
     Args:
-        name: Name of the model to retrieve. Currently the only supported model is "s3d".
+        name: Name of the model to retrieve. Currently only "s3d" is supported.
+        device: Device on which to place the normalization buffers.
 
     Returns:
-        Pre-trained video embedding model and the dimension of the extracted features.
+        Tuple of:
+            - Model: Pre-trained embedding model with normalization prepended.
+            - feature_size: Dimensionality of extracted features.
     """
     if name == "s3d":
+        # Instantiate S3D
         model = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
         model.classifier = torch.nn.Identity()
         feature_size = 1024
+
+        # Define normalization layer
+        mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1, 1)
+        std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1, 1)
+        norm = NormalizeInput(mean, std)
+
+        # Combine into one sequential model
+        model = torch.nn.Sequential(norm, model)
+
     else:
         raise ValueError(f"Model {name} is not supported.")
+
     return model, feature_size
 
 

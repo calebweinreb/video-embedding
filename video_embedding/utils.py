@@ -10,49 +10,33 @@ import re
 import glob
 
 
-def transform_video(video_array: np.ndarray, device: str) -> torch.Tensor:
-    """Normalize video clip, reformat as torch tensor, and put on device.
+def transform_video(video_array: np.ndarray) -> torch.Tensor:
+    """Normalize video clip, permute dimensions, and convert to tensor.
 
     Args:
-        video_array: 5D array of video frames with shape (B, T, H, W, C).
-        device: Device to put the tensor on (e.g., "cpu" or "cuda").
+        video_array: array of video frames with shape (B, T, H, W, C).
 
     Returns:
-        Transformed video tensor with shape (B, C, T, H, W).
+        [0-1] normalized tensor with shape (B, C, T, H, W).
     """
-    # Permute dimensions and convert to tensor
     video_array = video_array.astype(np.float32) / 255.0
     video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
-    video_tensor = torch.from_numpy(video_array).to(device)
-
-    # Normalize using ImageNet mean and std
-    mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1, 1)
-    video_tensor = (video_tensor - mean) / std
-
+    video_tensor = torch.from_numpy(video_array)
     return video_tensor
-
 
 
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     """Invert the transformations applied by `transform_video`.
 
     Args:
-        video_tensor: 5D tensor with shape (B, C, T, H, W), normalized and on any device.
+        video_tensor: [0-1] normalized tensor with shape (B, C, T, H, W)
 
     Returns:
-        5D NumPy array with shape (B, T, H, W, C), unnormalized and in uint8.
+        Array of video frames with shape (B, T, H, W, C) and values in [0, 255].
     """
-    # unnormalize and convert to uint8
-    mean = torch.tensor([0.485, 0.456, 0.406], device=video_tensor.device).view(1, 3, 1, 1, 1)
-    std = torch.tensor([0.229, 0.224, 0.225], device=video_tensor.device).view(1, 3, 1, 1, 1)
-    video_tensor = video_tensor * std + mean
-    video_tensor = (video_tensor * 255).clamp(0, 255).to(torch.uint8)
-
-    # permute dimensions back to (B, T, H, W, C) and convert to NumPy
-    video_array = video_tensor.permute(0, 2, 3, 4, 1).detac().cpu().numpy()  # (B, T, H, W, C)
+    video_array = video_tensor.permute(0, 2, 3, 4, 1).numpy()  # (B, T, H, W, C)
+    video_array = (video_array * 255.0).astype(np.uint8)  # Convert to [0, 255]
     return video_array
-
 
 
 def crop_image(
@@ -138,7 +122,7 @@ def sample_video_clips(
         num_samples: Number of clips to sample.
         duration: Ensure start frames are at least this distance from the end of the video.
         video_lengths: Video lengths in frames. If ``None``, lengths are determined from files.
-        
+
     Returns:
         List of tuples ``(video_path, start_frame)``.
     """
@@ -148,8 +132,12 @@ def sample_video_clips(
     p = np.array(video_lengths) + 1 - duration
     video_probabilities = p / np.sum(p)
 
-    video_indexes = np.random.choice(len(video_paths), size=num_samples, p=video_probabilities)
-    start_frames = [np.random.randint(0, video_lengths[i] - duration + 1) for i in video_indexes]
+    video_indexes = np.random.choice(
+        len(video_paths), size=num_samples, p=video_probabilities
+    )
+    start_frames = [
+        np.random.randint(0, video_lengths[i] - duration + 1) for i in video_indexes
+    ]
     return [(video_paths[i], t) for i, t in zip(video_indexes, start_frames)]
 
 
