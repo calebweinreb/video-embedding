@@ -234,25 +234,23 @@ class VideoEmbedder(torch.nn.Module):
             device=device,
         )
 
-    def preprocess(
-        self, video: np.ndarray, centroids: Optional[np.ndarray] = None
-    ) -> torch.Tensor:
-        """Preprocess a video clip prior to embedding.
+    def forward(self, video: np.ndarray, centroids: Optional[np.ndarray] = None) -> np.ndarray:
+        """Preprocess and embed a video clip.
 
         Args:
-            video: Video clip as ``(T, H, W, C)`` array.
-            centroid: Centroids for cropping as (T, 2) array. If None, frames are center-cropped.
+            video: Video clip as (T, H, W, C) array.
+            centroids: Centroids for cropping as (T, 2) array. If None, frames are center-cropped.
 
         Returns:
-            Torch tensor of shape ``(1, C, T', H', W')`` ready for the backbone.
+            Feature embedding as a 1D array.
         """
-        # check duration
+        # ensure video has the correct number of frames
         if video.shape[0] != self.duration:
             raise ValueError(
-                f"Video must have {self.duration} frames, but got {video.shape[0]}."
+                f"Expected video with {self.duration} frames, got {video.shape[0]} frames."
             )
 
-        # crop
+        # crop video if necessary
         if video.shape[1] > self.crop_size or video.shape[2] > self.crop_size:
             if centroids is None:
                 video = center_crop(video, self.crop_size)
@@ -264,26 +262,56 @@ class VideoEmbedder(torch.nn.Module):
                     ]
                 )
 
-        # downsample
+        # downsample video in time and space
         video = downsample_video(
             video,
             temporal_downsample=self.temporal_downsample,
             spatial_downsample=self.spatial_downsample,
         )
 
-        # transform to tensor and permute dimensions
-        return transform_video(video[None], device=self.device)
+        # normalize and transform video to tensor
+        video_tensor = transform_video(video)
 
-    def forward(self, video: np.ndarray) -> np.ndarray:
-        """Preprocess and embed a video clip.
-
-        Args:
-            video: Video clip as ``(T, H, W, C)`` array.
-
-        Returns:
-            Feature embedding as a 1D array.
-        """
+        # embed using the backbone
         with torch.no_grad():
-            video_tensor = self.preprocess(video)
-            features = self.backbone(video_tensor)
-        return features.detach().cpu().numpy().flatten()
+            video_tensor = video_tensor.to(self.device).unsqueeze(0)
+            features = self.backbone(video_tensor).squeeze(0)
+        return features.detach().cpu().numpy()
+
+
+
+class EmbeddingStore:
+    """Video embeddings in an HDF5 file."""
+    
+    def __init__(self, path: str):
+        self.path = path
+        self._file = None
+
+    def __enter__(self):
+        self._file = h5py.File(self.path, "a")
+        if "video_path" not in self._file:
+            dt = h5py.string_dtype(encoding="utf-8")
+            self._file.create_dataset("video_path", shape=(0,), maxshape=(None,), dtype=dt)
+            self._file.create_dataset("start_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
+            self._file.create_dataset("end_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
+            self._file.create_dataset("embedding", shape=(0, 0), maxshape=(None, None), dtype='f4')
+        return self
+
+    def __exit__(self, *args):
+        self._file.close()
+
+    def append(self, video_path: str, start_frame: int, end_frame: int, embedding: np.ndarray):
+        """Append one record (embedding and metadata)"""
+
+        # resize datasets to accommodate the new row
+        n_rows = self._file["video_path"].shape[0]
+        for key in ("video_path", "start_frame", "end_frame"):
+            ds = self._file[key]
+            ds.resize((n_rows + 1,))
+        self._file["embedding"].resize((n_rows + 1, embedding.shape[0]))
+
+        # write the new row
+        self._file["video_path" ][n_rows] = video_path
+        self._file["start_frame"][n_rows] = start_frame
+        self._file["end_frame"  ][n_rows] = end_frame
+        self._file["embedding"  ][n_rows] = embedding
