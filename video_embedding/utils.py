@@ -4,6 +4,7 @@ from typing import List, Tuple, Union, Optional
 from vidio.read import OpenCVReader
 import imageio
 import tqdm
+import h5py
 import os
 import json
 import re
@@ -270,3 +271,41 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
     if w > crop_size:
         video_array = video_array[:, :, (w - crop_size) // 2 : -(w - crop_size) // 2]
     return video_array
+
+
+class EmbeddingStore:
+    """Video embeddings in an HDF5 file."""
+    
+    def __init__(self, path: str):
+        self.path = path
+        self._file = None
+
+    def __enter__(self):
+        self._file = h5py.File(self.path, "a")
+        if "video_path" not in self._file:
+            dt = h5py.string_dtype(encoding="utf-8")
+            self._file.create_dataset("video_path", shape=(0,), maxshape=(None,), dtype=dt)
+            self._file.create_dataset("start_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
+            self._file.create_dataset("end_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
+            self._file.create_dataset("embedding", shape=(0, 0), maxshape=(None, None), dtype='f4')
+        return self
+
+    def __exit__(self, *args):
+        self._file.close()
+
+    def append(self, video_path: str, start_frame: int, end_frame: int, embedding: np.ndarray):
+        """Append one record (embedding and metadata)"""
+
+        # resize datasets to accommodate the new row
+        n_rows = self._file["video_path"].shape[0]
+        for key in ("video_path", "start_frame", "end_frame"):
+            ds = self._file[key]
+            ds.resize((n_rows + 1,))
+        self._file["embedding"].resize((n_rows + 1, embedding.shape[0]))
+
+        # write the new row
+        self._file["video_path" ][n_rows] = video_path
+        self._file["start_frame"][n_rows] = start_frame
+        self._file["end_frame"  ][n_rows] = end_frame
+        self._file["embedding"  ][n_rows] = embedding
+
