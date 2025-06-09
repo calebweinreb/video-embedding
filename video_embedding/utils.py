@@ -318,19 +318,35 @@ class EmbeddingStore:
 
 
 class VideoClipStreamer:
-    """Stream video clips of specified duration and spacing from a video file"""
+    """Stream video clips of specified duration and spacing file with optional cropping."""
     
-    def __init__(self, video_path: str, duration: int, spacing: int = 1):
+    def __init__(
+        self, 
+        video_path: str, 
+        duration: int, 
+        spacing: int = 1,
+        crop_size: Optional[int] = None,
+        centroids: Optional[np.ndarray] = None
+    ):
         """
         Args:
             video_path: Path to the video file.
             duration: Duration of each clip in frames.
             spacing: Number of frames between the start of each clip.
+            crop_size: Optional size of the crop to apply to each frame.
+            centroids: Array of crop centroids. If None, frames are center-cropped.
         """
         self.duration = duration
         self.spacing = spacing
         self.reader = OpenCVReader(video_path)
         self.frame_buffer = deque(maxlen=duration)
+        self.crop_size = crop_size
+        
+        if centroids is None:
+            height, width = self.reader[0].shape[1:3]
+            self.centroids = np.array([[width // 2, height // 2]] * len(self.reader), dtype=int)
+        else:
+            self.centroids = centroids
 
     def __iter__(self) -> Iterator[Tuple[np.ndarray, int]]:
         """Iterate over the video, yielding clips of specified duration.
@@ -341,9 +357,16 @@ class VideoClipStreamer:
                 - start_frame_index: The index of the first frame in the clip.
         """
         for current_ix, frame in enumerate(self.reader):
+            if self.crop_size is not None:
+                cen = self.centroids[current_ix]
+                frame = crop_image(frame, cen, self.crop_size)
+
             self.frame_buffer.append(frame)
             start_ix = current_ix - self.duration + 1
             if (start_ix % self.spacing == 0) and (start_ix >= 0):
                 video_clip = np.stack(self.frame_buffer)
                 yield video_clip, start_ix
                 
+    def __len__(self) -> int:
+        """Return the number of clips that can be generated from the video."""
+        return (len(self.reader) - self.duration) // self.spacing
