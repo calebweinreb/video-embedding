@@ -275,7 +275,7 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
 
 
 class EmbeddingStore:
-    """Video embeddings in an HDF5 file."""
+    """Stores video embeddings in an HDF5 file."""
     
     def __init__(self, path: str):
         self.path = path
@@ -295,8 +295,14 @@ class EmbeddingStore:
         self._file.close()
 
     def append(self, video_path: str, start_frame: int, end_frame: int, embedding: np.ndarray):
-        """Append one record (embedding and metadata)"""
+        """Append one record (embedding and metadata) to the store.
 
+        Args:
+            video_path: Path to the video file.
+            start_frame: Start frame index of the clip.
+            end_frame: End frame index of the clip (non-inclusive).
+            embedding: Embedding vector for the video clip.
+        """
         # resize datasets to accommodate the new row
         n_rows = self._file["video_path"].shape[0]
         for key in ("video_path", "start_frame", "end_frame"):
@@ -311,8 +317,8 @@ class EmbeddingStore:
         self._file["embedding"  ][n_rows] = embedding
 
 
-class ClipStreamer:
-    """Stream clips of specified duration and spacing from a video file"""
+class VideoClipStreamer:
+    """Stream video clips of specified duration and spacing from a video file"""
     
     def __init__(self, video_path: str, duration: int, spacing: int = 1):
         """
@@ -326,14 +332,18 @@ class ClipStreamer:
         self.reader = OpenCVReader(video_path)
         self.frame_buffer = deque(maxlen=duration)
 
-    def __iter__(self) -> Iterator[np.ndarray]:
+    def __iter__(self) -> Iterator[Tuple[np.ndarray, int]]:
         """Iterate over the video, yielding clips of specified duration.
         
         Yields:
-            Video clip as array of shape (duration, H, W, C),
+            Tuple of (video_clip, start_frame_index):
+                - video_clip: Array of shape (duration, H, W, C).
+                - start_frame_index: The index of the first frame in the clip.
         """
-        for ix, frame in enumerate(self.reader):
+        for current_ix, frame in enumerate(self.reader):
             self.frame_buffer.append(frame)
-            if (ix - self.duration + 1) % self.spacing == 0:
-                if len(self.frame_buffer) == self.duration:
-                    yield np.stack(self.frame_buffer)
+            start_ix = current_ix - self.duration + 1
+            if (start_ix % self.spacing == 0) and (start_ix >= 0):
+                video_clip = np.stack(self.frame_buffer)
+                yield video_clip, start_ix
+                
