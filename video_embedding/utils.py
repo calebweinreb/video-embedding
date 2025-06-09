@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from typing import List, Tuple, Union, Optional
+from typing import List, Tuple, Union, Optional, Iterator
 from vidio.read import OpenCVReader
 import imageio
 import tqdm
@@ -9,6 +9,7 @@ import os
 import json
 import re
 import glob
+from collections import deque
 
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
@@ -309,3 +310,30 @@ class EmbeddingStore:
         self._file["end_frame"  ][n_rows] = end_frame
         self._file["embedding"  ][n_rows] = embedding
 
+
+class ClipStreamer:
+    """Stream clips of specified duration and spacing from a video file"""
+    
+    def __init__(self, video_path: str, duration: int, spacing: int = 1):
+        """
+        Args:
+            video_path: Path to the video file.
+            duration: Duration of each clip in frames.
+            spacing: Number of frames between the start of each clip.
+        """
+        self.duration = duration
+        self.spacing = spacing
+        self.reader = OpenCVReader(video_path)
+        self.frame_buffer = deque(maxlen=duration)
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """Iterate over the video, yielding clips of specified duration.
+        
+        Yields:
+            Video clip as array of shape (duration, H, W, C),
+        """
+        for ix, frame in enumerate(self.reader):
+            self.frame_buffer.append(frame)
+            if (ix - self.duration + 1) % self.spacing == 0:
+                if len(self.frame_buffer) == self.duration:
+                    yield np.stack(self.frame_buffer)
