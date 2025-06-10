@@ -277,12 +277,13 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
 class EmbeddingStore:
     """Stores video embeddings in an HDF5 file."""
     
-    def __init__(self, path: str):
+    def __init__(self, path: str, mode: str = "a"):
         self.path = path
+        self.mode = mode
         self._file = None
 
     def __enter__(self):
-        self._file = h5py.File(self.path, "a")
+        self._file = h5py.File(self.path, self.mode)
         if "video_path" not in self._file:
             dt = h5py.string_dtype(encoding="utf-8")
             self._file.create_dataset("video_path", shape=(0,), maxshape=(None,), dtype=dt)
@@ -294,6 +295,29 @@ class EmbeddingStore:
     def __exit__(self, *args):
         self._file.close()
 
+    @property
+    def embeddings(self) -> h5py.Dataset:
+        return self._file["embedding"]
+
+    @property
+    def video_paths(self) -> h5py.Dataset:
+        return self._file["video_path"]
+
+    @property
+    def start_frames(self) -> h5py.Dataset:
+        return self._file["start_frame"]
+
+    @property
+    def end_frames(self) -> h5py.Dataset:
+        return self._file["end_frame"]
+
+    def get_metadata(self, index: int) -> Tuple[str, int, int]:
+        """Get metadata (video path, start frame, end frame) for a specific index."""
+        video_path = self._file["video_path"][index].decode("utf-8")
+        start_frame = self._file["start_frame"][index]
+        end_frame = self._file["end_frame"][index]
+        return video_path, start_frame, end_frame
+        
     def append(self, video_path: str, start_frame: int, end_frame: int, embedding: np.ndarray):
         """Append one record (embedding and metadata) to the store.
 
@@ -326,7 +350,7 @@ class VideoClipStreamer:
         duration: int, 
         spacing: int = 1,
         crop_size: Optional[int] = None,
-        centroids: Optional[np.ndarray] = None
+        track: Optional[np.ndarray] = None
     ):
         """
         Args:
@@ -334,7 +358,7 @@ class VideoClipStreamer:
             duration: Duration of each clip in frames.
             spacing: Number of frames between the start of each clip.
             crop_size: Optional size of the crop to apply to each frame.
-            centroids: Array of crop centroids. If None, frames are center-cropped.
+            track: Crop centroid for each frame. If None, frames are center-cropped.
         """
         self.duration = duration
         self.spacing = spacing
@@ -342,11 +366,11 @@ class VideoClipStreamer:
         self.frame_buffer = deque(maxlen=duration)
         self.crop_size = crop_size
         
-        if centroids is None:
+        if track is None:
             height, width = self.reader[0].shape[1:3]
-            self.centroids = np.array([[width // 2, height // 2]] * len(self.reader), dtype=int)
+            self.track = np.array([[width // 2, height // 2]] * len(self.reader), dtype=int)
         else:
-            self.centroids = centroids
+            self.track = track
 
     def __iter__(self) -> Iterator[Tuple[np.ndarray, int]]:
         """Iterate over the video, yielding clips of specified duration.
@@ -358,7 +382,7 @@ class VideoClipStreamer:
         """
         for current_ix, frame in enumerate(self.reader):
             if self.crop_size is not None:
-                cen = self.centroids[current_ix]
+                cen = self.track[current_ix]
                 frame = crop_image(frame, cen, self.crop_size)
 
             self.frame_buffer.append(frame)
