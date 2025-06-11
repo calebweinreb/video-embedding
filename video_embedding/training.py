@@ -116,6 +116,7 @@ def train(
     else:
         start_epoch = 0
 
+    learner = learner.to(device).train()
     for epoch in range(start_epoch, num_epochs):
         running_loss = 0.0
         loader = iter(dataloader)

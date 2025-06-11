@@ -142,6 +142,7 @@ def get_embedding_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
     if name == "s3d":
         # Instantiate S3D
         model = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
+        model.avgpool = torch.nn.Identity()
         model.classifier = torch.nn.Identity()
         feature_size = 1024
 
