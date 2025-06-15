@@ -3,163 +3,199 @@ import albumentations as A
 from scipy.ndimage import gaussian_filter1d
 import cv2
 from .utils import center_crop
+from abc import ABC, abstractmethod
 
 
-def generate_trajectory(
-    duration: int, dof: float, gaussian_kernel: int, multiplier: float
-) -> np.ndarray:
-    """Generate a random trajectory for camera drift.
+class VideoAugmentation(ABC):
+    """Base class for any video‐level augmentation.
 
-    Args:
-        duration: Number of frames in the video.
-        dof: Degrees of freedom for the t-distribution.
-        gaussian_kernel: Size of the Gaussian kernel for smoothing.
-        multiplier: Scaling factor for the trajectory magnitude.
-
-    Returns:
-        Random trajectory of shape ``(duration, 2)``.
+    Subclasses must implement the `_augment` method to perform
+    augmentation on a 4-D video array.
     """
-    trajectory = np.random.standard_t(dof, size=(duration, 2))
-    trajectory = gaussian_filter1d(trajectory, gaussian_kernel, axis=0)
-    trajectory = trajectory - trajectory.mean(0)
-    return (trajectory * multiplier).astype(int)
+    def __call__(self, video_array: np.ndarray) -> np.ndarray:
+        """Apply augmentation and validate output shape and dtype.
+
+        Args:
+            video_array: Input video of shape ``(T, H, W, C)``.
+
+        Returns:
+            Augmented video array of same shape and dtype.
+
+        Raises:
+            ValueError: If the output is not a 4-D array or dtype mismatch.
+        """
+        augmented = self._augment(video_array)
+        if not isinstance(augmented, np.ndarray):
+            raise ValueError(f"{self.__class__.__name__} must return an ndarray.")
+        if augmented.ndim != 4:
+            raise ValueError(f"{self.__class__.__name__} must return a 4-D array.")
+        if augmented.dtype != video_array.dtype:
+            raise ValueError(
+                f"{self.__class__.__name__} must return array with dtype {video_array.dtype}."
+            )
+        return augmented
+
+    @abstractmethod
+    def _augment(self, video_array: np.ndarray) -> np.ndarray:
+        """Perform augmentation on the video array."""
+        ...
 
 
-def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
-    """Translate an image by a given x and y shift.
+class TemporalCrop(VideoAugmentation):
+    """Randomly crop video along temporal axis to a fixed frame count."""
+    def __init__(self, target_duration):
+        """
+        Args:
+            target_duration: Number of frames to keep after cropping.
+        """
+        self.target_duration = target_duration
 
-    Args:
-        image: Input image.
-        shift_x: Shift in x direction.
-        shift_y: Shift in y direction.
-
-    Returns:
-        Translated image.
-    """
-    h, w = image.shape[:2]
-    M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
-    translated_image = cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT)
-    return translated_image
-
-
-def apply_albumentations_to_video(
-    video_array: np.ndarray, alb_transform: A.ReplayCompose
-) -> np.ndarray:
-    """Apply consistent albumentations transformation to all frames in video.
-
-    Args:
-        video_array: Video as array of frames.
-        alb_transform: Albumentations transform with replay capability.
-
-    Returns:
-        Augmented video array.
-    """
-    augmented_video = np.zeros_like(video_array)
-    first_frame = video_array[0]
-    augmented = alb_transform(image=first_frame)
-    augmented_video[0] = augmented["image"]
-    replay_data = augmented["replay"]
-    for i in range(1, video_array.shape[0]):
-        frame = video_array[i]
-        augmented = A.ReplayCompose.replay(replay_data, image=frame)
-        augmented_video[i] = augmented["image"]
-    return augmented_video
+    def _augment(self, video_array: np.ndarray) -> np.ndarray:
+        """Crop video to `target_duration` frames."""
+        num_frames = video_array.shape[0]
+        if num_frames < self.target_duration:
+            raise ValueError(
+                f"Video too short ({num_frames} frames) for TemporalCrop("
+                f"{self.target_duration})."
+            )
+        if num_frames == self.target_duration:
+            return video_array
+        start = np.random.randint(0, num_frames - self.target_duration + 1)
+        return video_array[start : start + self.target_duration]
 
 
-def random_temporal_crop(video_array: np.ndarray, duration: int) -> np.ndarray:
-    """Crop video randomly along temporal axis to a fixed frame count.
-
-    Args:
-        video_array: Video as array of frames.
-        duration: Target number of frames.
-
-    Returns:
-        Cropped video.
-    """
-    if len(video_array) > duration:
-        start = np.random.randint(len(video_array) - duration)
-        video_array = video_array[start : start + duration]
-    return video_array
-
-
-def random_drift(
-    video_array: np.ndarray,
-    drift_prob: float,
-    dof: float,
-    gaussian_kernel: int,
-    multiplier: float,
-) -> np.ndarray:
-    """Augment a video with random camera drift.
-
-    Args:
-        video_array: Input video.
-        drift_prob: Probability of applying drift.
-        dof: Degrees of freedom for the t-distribution.
-        gaussian_kernel: Smoothing kernel size.
-        multiplier: Scaling factor for the trajectory magnitude.
-
-    Returns:
-        Augmented video with random drift.
-    """
-    if np.random.uniform() < drift_prob:
-        duration = video_array.shape[0]
-        trajectory = generate_trajectory(duration, dof, gaussian_kernel, multiplier)
-        return np.stack([translate(im, *xy) for im, xy in zip(video_array, trajectory)])
-    else:
-        return video_array
-
-
-class VideoClipAugmentator:
-    """Apply consistent augmentations to video sequence using albumentations."""
-
+class TranslationDrift(VideoAugmentation):
+    """Apply random camera drift to each frame with given probability."""
     def __init__(
         self,
-        duration=30,
-        crop_size=256,
-        drift_prob=0.9,
+        p=0.9,
+        dof=1.5,
         gaussian_kernel=15,
         multiplier=6,
-        dof=1.5,
     ):
         """
         Args:
-            duration: Number of frames to keep after cropping temporally.
-            crop_size: Spatial crop size applied at the end of the pipeline.
-            drift_prob: Probability of applying camera drift.
-            gaussian_kernel: Gaussian smoothing kernel size for drift.
-            multiplier: Scaling factor for the drift magnitude.
-            dof: Degrees of freedom of the t-distribution used for drift.
+            p: Probability of applying drift.
+            dof: Degrees of freedom for the t-distribution.
+            gaussian_kernel: Size of the Gaussian kernel for smoothing.
+            multiplier: Scaling factor for the trajectory magnitude.
         """
-        self.duration = duration
+        self.p = p
+        self.dof = dof
+        self.gaussian_kernel = gaussian_kernel
+        self.multiplier = multiplier
+
+    @staticmethod
+    def generate_trajectory(
+        duration: int, dof: float, gaussian_kernel: int, multiplier: float
+    ) -> np.ndarray:
+        """Generate a random trajectory for camera drift.
+
+        Args:
+            duration: Number of frames in the video.
+            dof: Degrees of freedom for the t-distribution.
+            gaussian_kernel: Size of the Gaussian kernel for smoothing.
+            multiplier: Scaling factor for the trajectory magnitude.
+
+        Returns:
+            Random trajectory of shape ``(duration, 2)``.
+        """
+        traj = np.random.standard_t(dof, size=(duration, 2))
+        traj = gaussian_filter1d(traj, gaussian_kernel, axis=0)
+        traj = traj - traj.mean(0)
+        return (traj * multiplier).astype(int)
+
+    @staticmethod
+    def translate(image: np.ndarray, shift_x: int, shift_y: int) -> np.ndarray:
+        """Translate an image by a given x and y shift."""
+        h, w = image.shape[:2]
+        M = np.float32([[1, 0, shift_x], [0, 1, shift_y]])
+        return cv2.warpAffine(image, M, (w, h), borderMode=cv2.BORDER_REFLECT)
+
+    def _augment(self, video_array: np.ndarray) -> np.ndarray:
+        """Apply drift to each frame with probability `p`."""
+        if np.random.uniform() < self.p:
+            duration = video_array.shape[0]
+            traj = self.generate_trajectory(
+                duration, self.dof, self.gaussian_kernel, self.multiplier
+            )
+            return np.stack([
+                self.translate(frame, dx, dy)
+                for frame, (dx, dy) in zip(video_array, traj)
+            ])
+        return video_array
+
+
+class CenterCrop(VideoAugmentation):
+    """Spatially center-crop each frame in the video."""
+    def __init__(self, crop_size):
+        """
+        Args:
+            crop_size: Size of the square crop to apply.
+        """
         self.crop_size = crop_size
-        self.drift_params = (drift_prob, dof, gaussian_kernel, multiplier)
 
-        self.transform = A.ReplayCompose(
-            [
-                A.HorizontalFlip(p=0.5),  # Horizontal flip
-                A.VerticalFlip(p=0.5),  # Vertical flip
-                A.Affine(
-                    translate_percent=0.05,
-                    scale=(0.8, 1.1),
-                    rotate=(-360, 360),
-                    p=0.8,
-                    border_mode=cv2.BORDER_REFLECT,
-                ),
-                A.RandomBrightnessContrast(p=0.5),  # Adjust brightness and contrast
-                A.GaussianBlur(blur_limit=(1, 3), p=0.3),  # Apply Gaussian blur
-                A.HueSaturationValue(
-                    p=0.5, hue_shift_limit=5
-                ),  # Random hue, saturation, value shifts
-                A.RandomGamma(p=0.3),  # Random gamma adjustment
-                A.ColorJitter(p=0.3),  # Color jittering
-                A.MotionBlur(blur_limit=7, p=0.2),  # Motion blur
-            ]
-        )
+    def _augment(self, video_array: np.ndarray) -> np.ndarray:
+        """Apply center crop to the video array."""
+        return center_crop(video_array, self.crop_size)
 
-    def __call__(self, video_array):
-        """Apply the augmentation pipeline to a video clip."""
-        video_array = random_temporal_crop(video_array, self.duration)
-        video_array = random_drift(video_array, *self.drift_params)
-        video_array = apply_albumentations_to_video(video_array, self.transform)
-        video_array = center_crop(video_array, self.crop_size)
+
+class AlbumentationsAugs(VideoAugmentation):
+    """Wrap Albumentations transforms for consistent video augmentation."""
+    def __init__(self, alb_transforms):
+        """
+        Args:
+            alb_transforms: List of Albumentations transform instances.
+        """
+        self.transform = A.ReplayCompose(alb_transforms)
+
+    @classmethod
+    def default(cls):
+        """Create an instance with the default Albumentations pipeline."""
+        transforms = [
+            A.HorizontalFlip(p=0.5),  # Horizontal flip
+            A.VerticalFlip(p=0.5),    # Vertical flip
+            A.Affine(
+                translate_percent=0.05,
+                scale=(0.8, 1.1),
+                rotate=(-360, 360),
+                p=0.8,
+                border_mode=cv2.BORDER_REFLECT,
+            ),
+            A.RandomBrightnessContrast(p=0.5),  # Brightness & contrast
+            A.GaussianBlur(blur_limit=(1, 3), p=0.3),  # Gaussian blur
+            A.HueSaturationValue(p=0.5, hue_shift_limit=5),  # HSV shift
+            A.RandomGamma(p=0.3),  # Gamma adjustment
+            A.ColorJitter(p=0.3),  # Color jittering
+            A.MotionBlur(blur_limit=7, p=0.2),  # Motion blur
+        ]
+        return cls(transforms)
+
+    def _augment(self, video_array: np.ndarray) -> np.ndarray:
+        """Apply ReplayCompose and replay transforms across all frames."""
+        augmented_video = np.zeros_like(video_array)
+        first = video_array[0]
+        augmented = self.transform(image=first)
+        augmented_video[0] = augmented["image"]
+        replay_data = augmented["replay"]
+        for i in range(1, video_array.shape[0]):
+            frame = video_array[i]
+            result = A.ReplayCompose.replay(replay_data, image=frame)
+            augmented_video[i] = result["image"]
+        return augmented_video
+
+
+class VideoAugmentator:
+    """Compose multiple video augmentations into a single pipeline."""
+    def __init__(self, augmentations):
+        """
+        Args:
+            augmentations: Sequence of VideoAugmentation instances to apply in order.
+        """
+        self.augmentations = list(augmentations)
+
+    def __call__(self, video_array: np.ndarray) -> np.ndarray:
+        """Apply each augmentation in sequence to the video."""
+        for aug in self.augmentations:
+            video_array = aug(video_array)
         return video_array

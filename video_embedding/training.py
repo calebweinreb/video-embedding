@@ -19,7 +19,7 @@ from .utils import (
     load_video_clip,
     downsample_video,
 )
-from .augmentation import VideoClipAugmentator
+from .augmentation import VideoAugmentator
 
 
 class VideoClipDataset(Dataset):
@@ -28,7 +28,7 @@ class VideoClipDataset(Dataset):
     def __init__(
         self,
         video_paths: list[str],
-        augmentator: VideoClipAugmentator,
+        augmentator: VideoAugmentator,
         duration: int,
         temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
@@ -37,7 +37,7 @@ class VideoClipDataset(Dataset):
         """
         Args:
             video_paths: List of paths to video files.
-            augmentator: VideoClipAugmentator instance for applying augmentations.
+            augmentator: VideoAugmentator instance for applying augmentations.
             duration: Duration of loaded video clips prior to augmentation.
             temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
             spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
