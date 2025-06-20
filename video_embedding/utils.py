@@ -317,7 +317,7 @@ class EmbeddingStore:
             meta_grp = f.create_group("metadata")
             for col in self.metadata.columns:
                 data = self.metadata[col].values
-                if data.dtype == object:
+                if np.issubdtype(data.dtype, np.str_):  # catches both object and <Uxx types
                     dt = h5py.string_dtype(encoding='utf-8')
                     data = data.astype(str)
                 else:
