@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import torch
 from typing import List, Tuple, Union, Optional, Iterator
 from vidio.read import OpenCVReader
@@ -122,8 +123,8 @@ def sample_video_clips(
     num_samples: int,
     duration: int = 1,
     video_lengths: Optional[List[int]] = None,
-) -> List[Tuple[str, int]]:
-    """Uniformly sample clips (path and start frame) from a list of videos.
+) -> Tuple[List[str], List[int], List[int]]:
+    """Uniformly sample clips (path, start frame and end frame) from a list of videos.
 
     Args:
         video_paths: List of video file paths.
@@ -132,7 +133,10 @@ def sample_video_clips(
         video_lengths: Video lengths in frames. If ``None``, lengths are determined from files.
 
     Returns:
-        List of tuples ``(video_path, start_frame)``.
+        Tuple of lists containing:
+            - video_paths: Sampled video file paths.
+            - start_frames: Start frame indices for each sampled clip.
+            - end_frames: End frame indices for each sampled clip (non-inclusive).
     """
     if video_lengths is None:
         video_lengths = [len(OpenCVReader(p)) for p in video_paths]
@@ -146,7 +150,8 @@ def sample_video_clips(
     start_frames = [
         np.random.randint(0, video_lengths[i] - duration + 1) for i in video_indexes
     ]
-    return [(video_paths[i], t) for i, t in zip(video_indexes, start_frames)]
+    end_frames = [start + duration for start in start_frames]
+    return [video_paths[i] for i in video_indexes], start_frames, end_frames
 
 
 def save_model_config(
@@ -210,19 +215,19 @@ def get_latest_checkpoint(checkpoint_dir: str) -> Optional[str]:
         return None
 
 
-def load_video_clip(path: str, start: int, duration: int) -> np.ndarray:
+def load_video_clip(path: str, start: int, end: int) -> np.ndarray:
     """Read video clip from a file using OpenCV.
 
     Args:
         path: Path to the video file.
         start: Start frame index for the clip.
-        duration: Duration of the clip in frames.
+        end: End frame index for the clip (non-inclusive).
 
     Returns:
         Video as array of frames.
     """
     reader = OpenCVReader(path)
-    clip = reader[start : start + duration]
+    clip = reader[start : end]
     return np.stack(clip)
 
 
@@ -275,74 +280,74 @@ def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
 
 
 class EmbeddingStore:
-    """Stores video embeddings in an HDF5 file."""
-    
-    def __init__(self, path: str, mode: str = "a"):
-        self.path = path
-        self.mode = mode
-        self._file = None
+    """Store for video embeddings and associated metadata."""
+    REQUIRED_METADATA = {"video_path", "start_frame", "end_frame"}
 
-    def __enter__(self):
-        self._file = h5py.File(self.path, self.mode)
-        if "video_path" not in self._file:
-            dt = h5py.string_dtype(encoding="utf-8")
-            self._file.create_dataset("video_path", shape=(0,), maxshape=(None,), dtype=dt)
-            self._file.create_dataset("start_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
-            self._file.create_dataset("end_frame", shape=(0,), maxshape=(None,), dtype=np.int32)
-            self._file.create_dataset("embedding", shape=(0, 0), maxshape=(None, None), dtype='f4')
-        return self
-
-    def __exit__(self, *args):
-        self._file.close()
-
-    @property
-    def embeddings(self) -> h5py.Dataset:
-        return self._file["embedding"]
-
-    @property
-    def video_paths(self) -> h5py.Dataset:
-        return self._file["video_path"]
-
-    @property
-    def start_frames(self) -> h5py.Dataset:
-        return self._file["start_frame"]
-
-    @property
-    def end_frames(self) -> h5py.Dataset:
-        return self._file["end_frame"]
-
-    def get_metadata(self, index: int) -> Tuple[str, int, int]:
-        """Get metadata (video path, start frame, end frame) for a specific index."""
-        video_path = self._file["video_path"][index].decode("utf-8")
-        start_frame = self._file["start_frame"][index]
-        end_frame = self._file["end_frame"][index]
-        return video_path, start_frame, end_frame
-        
-    def append(self, video_path: str, start_frame: int, end_frame: int, embedding: np.ndarray):
-        """Append one record (embedding and metadata) to the store.
-
-        Args:
-            video_path: Path to the video file.
-            start_frame: Start frame index of the clip.
-            end_frame: End frame index of the clip (non-inclusive).
-            embedding: Embedding vector for the video clip.
+    def __init__(self, embeddings: np.ndarray, metadata: pd.DataFrame):
         """
-        # resize datasets to accommodate the new row
-        n_rows = self._file["video_path"].shape[0]
-        for key in ("video_path", "start_frame", "end_frame"):
-            ds = self._file[key]
-            ds.resize((n_rows + 1,))
-        self._file["embedding"].resize((n_rows + 1, embedding.shape[0]))
+        embeddings: np.ndarray of shape (n_points, embedding_dim)
+        metadata: pd.DataFrame of shape (n_points, n_metadata_fields), must contain REQUIRED_COLUMNS
+        """
+        self.embeddings = embeddings
+        self.metadata = metadata
+        self._validate()
 
-        # write the new row
-        self._file["video_path" ][n_rows] = video_path
-        self._file["start_frame"][n_rows] = start_frame
-        self._file["end_frame"  ][n_rows] = end_frame
-        self._file["embedding"  ][n_rows] = embedding
+    def _validate(self):
+        """Validate embeddings and metadata consistency. Raises ValueError if checks fail."""
+        # Check matching number of datapoints
+        n_emb = self.embeddings.shape[0]
+        n_meta = self.metadata.shape[0]
+        if n_emb != n_meta:
+            raise ValueError(
+                f"Mismatch in number of datapoints: embeddings has {n_emb}, metadata has {n_meta}"
+            )
+        # Check required metadata columns
+        missing = self.REQUIRED_METADATA - set(self.metadata.columns)
+        if missing:
+            raise ValueError(
+                f"Metadata is missing required columns: {sorted(missing)}"
+            )
+
+    def save(self, path: str):
+        """Save embeddings and metadata to an HDF5 file. Overwrites any existing file."""
+        self._validate()
+
+        with h5py.File(path, "w") as f:
+            f.create_dataset("embeddings", data=self.embeddings)
+            meta_grp = f.create_group("metadata")
+            for col in self.metadata.columns:
+                data = self.metadata[col].values
+                if data.dtype == object:
+                    dt = h5py.string_dtype(encoding='utf-8')
+                    data = data.astype(str)
+                else:
+                    dt = data.dtype
+                meta_grp.create_dataset(col, data=data, dtype=dt)
+
+
+    def __len__(self) -> int:
+        """Return the number of embeddings stored."""
+        return len(self.embeddings)
+
+    def get_clip_info(self, index: int) -> Tuple[str, int, int]:
+        """Get video clip info (path, start frame, end frame) at a given index."""
+        if index < 0 or index >= len(self):
+            raise IndexError(f"Index {index} out of bounds for embeddings of length {len(self)}")
+        row = self.metadata.iloc[index]
+        return row["video_path"], row["start_frame"], row["end_frame"]
+
+    @classmethod
+    def load(cls, path: str):
+        """Load embeddings and metadata from an HDF5 file and return an EmbeddingData instance."""
+        with h5py.File(path, "r") as f:
+            embeddings = f["embeddings"][:]
+            meta_grp = f["metadata"]
+            metadata = pd.DataFrame({key: meta_grp[key][()] for key in meta_grp})
+        return cls(embeddings, metadata)
 
 
 class VideoClipStreamer:
-    """Stream video clips of specified duration and spacing file with optional cropping."""
+    """Stream video clips of specified duration and spacing (with optional cropping)."""
     
     def __init__(
         self, 
@@ -372,14 +377,11 @@ class VideoClipStreamer:
         else:
             self.track = track
 
-    def __iter__(self) -> Iterator[Tuple[np.ndarray, int]]:
-        """Iterate over the video, yielding clips of specified duration.
-        
-        Yields:
-            Tuple of (video_clip, start_frame_index):
-                - video_clip: Array of shape (duration, H, W, C).
-                - start_frame_index: The index of the first frame in the clip.
-        """
+        self.start_frames = np.arange(0, len(self.reader) - duration + 1, spacing)
+        self.end_frames = self.start_frames + duration
+
+    def __iter__(self) -> Iterator[np.ndarray]:
+        """Iterate over the video, yielding clips of specified duration."""
         for current_ix, frame in enumerate(self.reader):
             if self.crop_size is not None:
                 cen = self.track[current_ix]
@@ -387,9 +389,8 @@ class VideoClipStreamer:
 
             self.frame_buffer.append(frame)
             start_ix = current_ix - self.duration + 1
-            if (start_ix % self.spacing == 0) and (start_ix >= 0):
-                video_clip = np.stack(self.frame_buffer)
-                yield video_clip, start_ix
+            if start_ix in self.start_frames:
+                yield np.stack(self.frame_buffer)
                 
     def __len__(self) -> int:
         """Return the number of clips that can be generated from the video."""

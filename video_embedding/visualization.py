@@ -93,12 +93,11 @@ def inspect_crop_sizes(
     Returns:
         Figure containing the visualizations.
     """
-    video_paths = list(tracks.keys())
-    samples = sample_video_clips(video_paths, n_examples)
+    video_paths, frame_ixs, _ = sample_video_clips(list(tracks.keys()), n_examples)
     box = np.array([[-1, -1, 1, 1, -1], [-1, 1, 1, -1, -1]]).T / 2
 
     fig, axes = plt.subplots(2, n_examples, sharey="row")
-    for i, (video_path, frame_ix) in enumerate(samples):
+    for i, (video_path, frame_ix) in enumerate(zip(video_paths, frame_ixs)):
         frame = OpenCVReader(video_path)[frame_ix]
         cen = tracks[video_path][frame_ix]
 
