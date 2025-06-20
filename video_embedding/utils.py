@@ -317,11 +317,13 @@ class EmbeddingStore:
             meta_grp = f.create_group("metadata")
             for col in self.metadata.columns:
                 data = self.metadata[col].values
-                if np.issubdtype(data.dtype, np.str_):  # catches both object and <Uxx types
+                if np.issubdtype(data.dtype, np.str_) or data.dtype == object:
+                    data = data.astype(object)
                     dt = h5py.string_dtype(encoding='utf-8')
-                    data = data.astype(str)
-                else:
+                elif np.issubdtype(data.dtype, np.number) or np.issubdtype(data.dtype, np.bool_):
                     dt = data.dtype
+                else:
+                    raise TypeError(f"Unsupported dtype in column '{col}': {data.dtype}")
                 meta_grp.create_dataset(col, data=data, dtype=dt)
 
 
