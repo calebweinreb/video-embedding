@@ -12,6 +12,7 @@ from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
 from vidio.read import OpenCVReader
+import warnings
 from .utils import (
     transform_video,
     untransform_video,
@@ -95,6 +96,14 @@ def train(
         steps_per_epoch: Number of steps per epoch.
         device: Device to use for training.
     """
+    if steps_per_epoch > len(dataloader):
+        steps_per_epoch = len(dataloader)
+        warning_msg = (
+            f"Steps per epoch ({steps_per_epoch}) exceeds dataset size ({len(dataloader)}). "
+            "Adjusting steps per epoch to match dataset size."
+        )
+        warnings.warn(warning_msg, UserWarning)
+
     checkpoint_dir = os.path.join(training_dir, "checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
     print(f"Saving checkpoints to {checkpoint_dir}")
