@@ -33,6 +33,7 @@ class VideoClipDataset(Dataset):
         temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
         device: str = "cuda",
+        frames_to_use: Optional[list[np.ndarray]] = None,
     ):
         """
         Args:
@@ -42,6 +43,7 @@ class VideoClipDataset(Dataset):
             temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
             spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
             device: Device on which the dataset will be used.
+            frames_to_use: Optional list frame indexes to use from each video.
         """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
@@ -50,13 +52,17 @@ class VideoClipDataset(Dataset):
         self.duration = duration
         self.device = device
 
-        lengths = [len(OpenCVReader(p)) for p in video_paths]
-        self.video_ixs = np.hstack(
-            [torch.ones(n - duration) * i for i, n in enumerate(lengths)]
-        ).astype(int)
-        self.frame_ixs = np.hstack(
-            [torch.arange(n - duration) for i, n in enumerate(lengths)]
-        ).astype(int)
+        vid_lengths = [len(OpenCVReader(p)) for p in video_paths]
+        if frames_to_use is None:
+            frames_to_use = [np.arange(n - duration) for n in vid_lengths]
+        else:
+            frames_to_use = [ixs[ixs < n - duration] for n, ixs in zip(vid_lengths, frames_to_use)]
+        
+        self.frame_ixs = torch.from_numpy(np.hstack(frames_to_use).astype(int))
+        self.video_ixs = torch.from_numpy(
+            np.hstack([np.ones(len(ixs)) * i for i, ixs in enumerate(frames_to_use)]).astype(int)
+        )
+        
 
     def __len__(self):
         return len(self.video_ixs)
@@ -71,6 +77,9 @@ class VideoClipDataset(Dataset):
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
         return x_one, x_two
+
+
+
 
 
 def train(
