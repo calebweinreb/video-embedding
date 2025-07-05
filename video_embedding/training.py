@@ -32,7 +32,6 @@ class VideoClipDataset(Dataset):
         duration: int,
         temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
-        device: str = "cuda",
         frames_to_use: Optional[list[np.ndarray]] = None,
     ):
         """
@@ -42,7 +41,6 @@ class VideoClipDataset(Dataset):
             duration: Duration of loaded video clips prior to augmentation.
             temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
             spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
-            device: Device on which the dataset will be used.
             frames_to_use: Optional list frame indexes to use from each video.
         """
         self.temporal_downsample = temporal_downsample
@@ -50,20 +48,10 @@ class VideoClipDataset(Dataset):
         self.video_paths = video_paths
         self.augmentator = augmentator
         self.duration = duration
-        self.device = device
 
         vid_lengths = [len(OpenCVReader(p)) for p in video_paths]
-        if frames_to_use is None:
-            frames_to_use = [np.arange(n - duration) for n in vid_lengths]
-        else:
-            frames_to_use = [ixs[ixs < n - duration] for n, ixs in zip(vid_lengths, frames_to_use)]
+        self.frame_ixs, self.video_ixs = self._get_indexes(vid_lengths, duration, frames_to_use)
         
-        self.frame_ixs = torch.from_numpy(np.hstack(frames_to_use).astype(int))
-        self.video_ixs = torch.from_numpy(
-            np.hstack([np.ones(len(ixs)) * i for i, ixs in enumerate(frames_to_use)]).astype(int)
-        )
-        
-
     def __len__(self):
         return len(self.video_ixs)
 
@@ -71,16 +59,73 @@ class VideoClipDataset(Dataset):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
         frames = load_video_clip(self.video_paths[video_ix], frame_ix, frame_ix + self.duration)
-        frames = downsample_video(
-            frames, self.temporal_downsample, self.spatial_downsample
-        )
+        frames = downsample_video(frames, self.temporal_downsample, self.spatial_downsample)
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
         return x_one, x_two
 
+    @staticmethod
+    def _get_indexes(
+        vid_lengths: list[int], duration: int, frames_to_use: list[np.ndarray]
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Generates frame and video indexes for the dataset."""
+        if frames_to_use is None:
+            frames_to_use = [np.arange(n - duration) for n in vid_lengths]
+        else:
+            frames_to_use = [ixs[ixs < n - duration] for n, ixs in zip(vid_lengths, frames_to_use)]
+        frame_ixs = torch.from_numpy(np.hstack(frames_to_use).astype(int))
+        video_ixs = torch.from_numpy(
+            np.hstack([np.ones(len(ixs)) * i for i, ixs in enumerate(frames_to_use)]).astype(int)
+        )
+        return frame_ixs, video_ixs
 
 
+class MultiViewVideoClipDataset(VideoClipDataset):
+    """Class for loading multi-view video clips and applying augmentations.
+    
+    This class is designed for multi-camera datasets. During training, pairs of synchronized clips
+    are sampled from different viewpoints and then independently augmented."""
 
+    def __init__(
+        self,
+        video_path_sets: list[list[str]],
+        augmentator: VideoAugmentator,
+        duration: int,
+        temporal_downsample: int = 1,
+        spatial_downsample: float = 1.0,
+        frames_to_use: Optional[list[np.ndarray]] = None,
+    ):
+        """
+        Args:
+            video_path_sets: List of lists of paths to video files, where each inner list contains 
+                             paths to synchronized videos from different cameras.
+            augmentator: VideoAugmentator instance for applying augmentations.
+            duration: Duration of loaded video clips prior to augmentation.
+            temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
+            spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
+            frames_to_use: Optional list of frame indexes to use from each video.
+        """
+        self.temporal_downsample = temporal_downsample
+        self.spatial_downsample = spatial_downsample
+        self.video_path_sets = video_path_sets
+        self.augmentator = augmentator
+        self.duration = duration
+
+        vid_lengths = [len(OpenCVReader(paths[0])) for paths in video_path_sets]
+        self.frame_ixs, self.video_ixs = self._get_indexes(vid_lengths, duration, frames_to_use)
+
+    def __getitem__(self, idx):
+        video_ix = self.video_ixs[idx]
+        frame_ix = self.frame_ixs[idx]
+        path1, path2 = np.random.choice(self.video_path_sets[video_ix], size=2, replace=False)
+        frames1 = load_video_clip(path1, frame_ix, frame_ix + self.duration)
+        frames2 = load_video_clip(path2, frame_ix, frame_ix + self.duration)
+        frames1 = downsample_video(frames1, self.temporal_downsample, self.spatial_downsample)
+        frames2 = downsample_video(frames2, self.temporal_downsample, self.spatial_downsample)
+        x_one = transform_video(self.augmentator(frames1))
+        x_two = transform_video(self.augmentator(frames2))
+        return x_one, x_two
+    
 
 def train(
     training_dir: str,
