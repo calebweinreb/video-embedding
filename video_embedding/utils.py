@@ -342,9 +342,16 @@ class EmbeddingStore:
     def load(cls, path: str):
         """Load embeddings and metadata from an HDF5 file and return an EmbeddingData instance."""
         with h5py.File(path, "r") as f:
-            embeddings = f["embeddings"][:]
+            embeddings = f["embeddings"][()]
             meta_grp = f["metadata"]
-            metadata = pd.DataFrame({key: meta_grp[key][()] for key in meta_grp})
+            mdict = {}
+            for key in meta_grp:
+                dset = meta_grp[key]
+                if dset.dtype.kind in {"S", "O"}:
+                    mdict[key] = dset.asstr()[()]
+                else:
+                    mdict[key] = dset[()]
+            metadata = pd.DataFrame(mdict)
         return cls(embeddings, metadata)
 
 
@@ -396,4 +403,4 @@ class VideoClipStreamer:
                 
     def __len__(self) -> int:
         """Return the number of clips that can be generated from the video."""
-        return (len(self.reader) - self.duration) // self.spacing
+        return len(self.start_frames)
