@@ -15,39 +15,15 @@ from collections import deque
 
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
-    """Normalize video clip, permute dimensions, and convert to tensor.
-
-    Args:
-        video_array: 4D or 5D array of video frames with shape ([B], T, H, W, C).
-
-    Returns:
-        4D or 5D [0-1] normalized tensor with shape ([B], C, T, H, W).
-    """
+    """Permute axes (… T H W C) → (… C T H W), 0-1 normalize, and return as contiguous tensor."""
     video_array = video_array.astype(np.float32) / 255.0
-    if video_array.ndim == 4:
-        video_array = np.transpose(video_array, (3, 0, 1, 2))  # (C, T, H, W)
-    elif video_array.ndim == 5:
-        video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
-    video_tensor = torch.from_numpy(video_array)
-    return video_tensor
-
+    video_array = np.moveaxis(video_array, -1, -4)
+    return torch.from_numpy(video_array).contiguous()
 
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
-    """Invert the transformations applied by `transform_video`.
-
-    Args:
-        video_tensor: 4D or 5D tensor with shape ([B], C, T, H, W) and values in [0, 1].
-
-    Returns:
-        4D or 5D array of video frames with shape ([B], T, H, W, C) and values in [0, 255].
-    """
-    if video_tensor.ndim == 4:
-        video_array = video_tensor.permute(1, 2, 3, 0).numpy()
-    elif video_tensor.ndim == 5:
-        video_array = video_tensor.permute(0, 2, 3, 4, 1).numpy()
-    video_array = (video_array * 255.0).astype(np.uint8)  # Convert to [0, 255]
-    return video_array
-
+    """Invert the transformations applied by `transform_video`."""
+    video_array = np.moveaxis(video_tensor.numpy(), -4, -1)
+    return (video_array * 255.0).astype(np.uint8)
 
 def crop_image(
     image: np.ndarray, centroid: Tuple[int, int], crop_size: Union[int, Tuple[int, int]]
