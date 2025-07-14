@@ -118,29 +118,29 @@ def inspect_crop_sizes(
 
     return fig
 
-
-def inspect_dataloader(
-    dataloader: Union[torch.utils.data.DataLoader, Iterable],
+def inspect_dataset(
+    dataset: torch.utils.data.Dataset,
     num_samples: int = 4,
-    inches: int = 3,
+    inches: int = 2,
 ) -> HTML:
-    """Visualize a batch of augmented video clip pairs from a dataloader.
+    """Visualize a batch of augmented video clip pairs from a dataset.
 
     Args:
-        dataloader: Dataloader or iterable yielding batched pairs of augmented video clips.
+        dataset: Dataset yielding pairs of augmented video clips.
         num_samples: Number of samples to visualize.
         inches: Size of each subplot in inches.
 
     Returns:
         HTML5 video player displaying the video clips.
     """
-    x_one, x_two = next(iter(dataloader))
-    if x_one.shape[0] < num_samples:
+    if len(dataset) < num_samples:
         raise ValueError(
-            f"Batch size {x_one.shape[0]} is less than requested number of samples {num_samples}."
+            f"Dataset size {len(dataset)} is less than requested number of samples {num_samples}."
         )
-    x_one = untransform_video(x_one)[:num_samples]
-    x_two = untransform_video(x_two)[:num_samples]
+    sample_ixs = np.random.choice(len(dataset), num_samples, replace=False)
+    x_one, x_two = zip(*[dataset[i] for i in sample_ixs])
+    x_one = untransform_video(torch.stack(x_one))
+    x_two = untransform_video(torch.stack(x_two))
     return play_videos(np.concatenate([x_one, x_two]), 2, num_samples, inches)
 
 
