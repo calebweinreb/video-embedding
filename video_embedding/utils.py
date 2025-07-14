@@ -7,6 +7,7 @@ import imageio
 import tqdm
 import h5py
 import os
+import cv2
 import json
 import re
 import glob
