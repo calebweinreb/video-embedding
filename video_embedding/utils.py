@@ -26,35 +26,56 @@ def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     return (video_array * 255.0).astype(np.uint8)
 
 def crop_image(
-    image: np.ndarray, centroid: Tuple[int, int], crop_size: Union[int, Tuple[int, int]]
+    image: np.ndarray,
+    centroid: Tuple[int, int],
+    crop_size: Union[int, Tuple[int, int]],
+    border_mode: int = cv2.BORDER_REFLECT,
+    border_value: Union[int, Tuple[int, int, int]] = 0,
 ) -> np.ndarray:
-    """Crop an image around a centroid.
+    """Crop an image around a centroid, using OpenCV border modes for padding.
 
     Args:
-        image: Image to crop as array of shape ``(H, W, C)`` or ``(H, W)``.
-        centroid: Tuple of ``(x, y)`` coordinates representing the centroid around which to crop.
-        crop_size: Size of the crop. If an integer is provided, it will crop a square of that size.
+        image:       Input image, shape (H, W) or (H, W, C).
+        centroid:    (x, y) coordinates of the crop center.
+        crop_size:   Either an int (square) or (width, height).
+        border_mode: OpenCV border mode (e.g. cv2.BORDER_REFLECT).
+        border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel.
 
     Returns:
-        Cropped image as array of shape ``(H', W', C)`` or ``(H', W')``.
+        Cropped patch of size exactly (height, width, ...) or (height, width).
     """
+    # determine crop width and height
     if isinstance(crop_size, tuple):
         w, h = crop_size
     else:
-        w, h = crop_size, crop_size
+        w = h = crop_size
+
     x, y = int(centroid[0]), int(centroid[1])
+    H, W = image.shape[:2]
+    half_w, half_h = w // 2, h // 2
 
-    x_min = max(0, x - w // 2)
-    y_min = max(0, y - h // 2)
-    x_max = min(image.shape[1], x + w // 2)
-    y_max = min(image.shape[0], y + h // 2)
+    # compute how much padding is needed on each side
+    top    = max(half_h - y, 0)
+    bottom = max((y + half_h) - (H - 1), 0)
+    left   = max(half_w - x, 0)
+    right  = max((x + half_w) - (W - 1), 0)
 
-    cropped = image[y_min:y_max, x_min:x_max]
-    padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
-    pad_x = max(w // 2 - x, 0)
-    pad_y = max(h // 2 - y, 0)
-    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
-    return padded
+    # pad if necessary
+    if any((top, bottom, left, right)):
+        image = cv2.copyMakeBorder(
+            image,
+            top, bottom, left, right,
+            borderMode=border_mode,
+            value=border_value
+        )
+        # shift centroid to account for padding
+        x += left
+        y += top
+
+    # now crop exactly w×h around (x, y)
+    x0, y0 = x - half_w, y - half_h
+    x1, y1 = x0 + w,     y0 + h
+    return image[y0:y1, x0:x1]
 
 
 def crop_video(
@@ -64,6 +85,8 @@ def crop_video(
     crop_size: Union[int, Tuple[int, int]],
     quality: int = 5,
     constrain_track: Optional[bool] = False,
+    border_mode: int = cv2.BORDER_REFLECT,
+    border_value: Union[int, Tuple[int, int, int]] = 0,
 ) -> None:
     """Crop a video around a time-varying centroid.
 
@@ -74,6 +97,8 @@ def crop_video(
         crop_size: Size of the crop. If an integer is provided, it crops a square of that size.
         quality: Quality of the output video passed to ``imageio.get_writer``.
         constrain_track: If ``True``, ensures the cropped area does not exceed the video boundaries.
+        border_mode: OpenCV border mode for padding (e.g., cv2.BORDER_REFLECT).
+        border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel images.
     """
     reader = OpenCVReader(video_path)
 
@@ -91,7 +116,7 @@ def crop_video(
         for frame_ix in tqdm.trange(len(reader)):
             frame = reader[frame_ix]
             cen = track[frame_ix]
-            cropped_frame = crop_image(frame, cen, crop_size)
+            cropped_frame = crop_image(frame, cen, crop_size, border_mode, border_value)
             writer.append_data(cropped_frame)
 
 
@@ -233,28 +258,7 @@ def downsample_video(
         )
 
     return video_array
-
-
-def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
-    """Crop video around its center (fast method that uses slicing).
-
-    Args:
-        video_array: Video as array of frames.
-        crop_size: Size of the crop.
-
-    Note:
-        If the video is smaller than crop_size, it will not be cropped.
-
-    Returns:
-        Center-cropped video.
-    """
-    h, w = video_array.shape[1:3]
-    if h > crop_size:
-        video_array = video_array[:, (h - crop_size) // 2 : -(h - crop_size) // 2]
-    if w > crop_size:
-        video_array = video_array[:, :, (w - crop_size) // 2 : -(w - crop_size) // 2]
-    return video_array
-
+    
 
 class EmbeddingStore:
     """Store for video embeddings and associated metadata."""

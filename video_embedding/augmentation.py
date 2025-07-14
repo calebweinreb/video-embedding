@@ -2,7 +2,8 @@ import numpy as np
 import albumentations as A
 from scipy.ndimage import gaussian_filter1d
 import cv2
-from .utils import center_crop
+from .utils import crop_image
+from typing import Tuple, Union
 from abc import ABC, abstractmethod
 
 
@@ -125,20 +126,32 @@ class TranslationDrift(VideoAugmentation):
             ])
         return video_array
 
-
 class CenterCrop(VideoAugmentation):
     """Spatially center-crop each frame in the video."""
-    def __init__(self, crop_size):
+    def __init__(
+        self, 
+        crop_size: int, 
+        border_mode: int = cv2.BORDER_REFLECT, 
+        border_value: Union[int, Tuple[int, int, int]] = 0
+    ):
         """
         Args:
             crop_size: Size of the square crop to apply.
+            border_mode: OpenCV border mode for padding (default is cv2.BORDER_REFLECT).
+            border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel images.
+            
         """
         self.crop_size = crop_size
+        self.border_mode = border_mode
+        self.border_value = border_value
 
     def _augment(self, video_array: np.ndarray) -> np.ndarray:
-        """Apply center crop to the video array."""
-        return center_crop(video_array, self.crop_size)
-
+        """Crop video frames around their centroid."""
+        centroid = (video_array.shape[2] // 2, video_array.shape[1] // 2)
+        return np.stack([
+            crop_image(frame, centroid, self.crop_size, self.border_mode, self.border_value)
+            for frame in video_array
+        ])
 
 class AlbumentationsAugs(VideoAugmentation):
     """Wrap Albumentations transforms for consistent video augmentation."""

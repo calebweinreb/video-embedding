@@ -10,7 +10,6 @@ from .utils import (
     get_latest_checkpoint,
     downsample_video,
     crop_image,
-    center_crop,
 )
 
 
@@ -254,14 +253,10 @@ class VideoEmbedder(torch.nn.Module):
         # crop video if necessary
         if video.shape[1] > self.crop_size or video.shape[2] > self.crop_size:
             if centroids is None:
-                video = center_crop(video, self.crop_size)
-            else:
-                video = np.stack(
-                    [
-                        crop_image(frame, cen, self.crop_size)
-                        for frame, cen in zip(video, centroids)
-                    ]
-                )
+                centroids = np.array([[video.shape[2] // 2, video.shape[1] // 2]] * video.shape[0])
+            video = np.stack(
+                [crop_image(frame, cen, self.crop_size) for frame, cen in zip(video, centroids)]
+            )
 
         # downsample video in time and space
         video = downsample_video(
