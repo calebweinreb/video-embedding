@@ -18,7 +18,7 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
     """Permute axes (… T H W C) → (… C T H W), 0-1 normalize, and return as contiguous tensor."""
     video_array = video_array.astype(np.float32) / 255.0
     video_array = np.moveaxis(video_array, -1, -4)
-    return torch.from_numpy(video_array).contiguous()
+    return torch.tensor(video_array)
 
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     """Invert the transformations applied by `transform_video`."""

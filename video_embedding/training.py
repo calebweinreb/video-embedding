@@ -71,7 +71,7 @@ class VideoClipDataset(Dataset):
         )
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
-        return x_one.clone(), x_two.clone()
+        return x_one, x_two
 
 
 def train(
