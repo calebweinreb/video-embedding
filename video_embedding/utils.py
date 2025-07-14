@@ -65,7 +65,7 @@ def crop_image(
     # pad if necessary
     if any((top, bottom, left, right)):
         image = cv2.copyMakeBorder(
-            image, top, bottom, left, right, borderMode=border_mode, value=border_value
+            image, top, bottom, left, right, borderType=border_mode, value=border_value
         )
         # shift centroid to account for padding
         x += left
