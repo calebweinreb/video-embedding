@@ -35,7 +35,9 @@ def play_videos(
             raise ValueError("Number of titles must match number of videos.")
 
     if rows * cols < num_videos:
-        raise ValueError("Grid size (rows * cols) is smaller than the number of videos.")
+        raise ValueError(
+            "Grid size (rows * cols) is smaller than the number of videos."
+        )
 
     fig, axes = plt.subplots(
         rows, cols, figsize=(cols * inches, rows * inches), constrained_layout=True
@@ -75,6 +77,7 @@ def play_videos(
         fig, animate, init_func=init, frames=num_frames, interval=50, blit=True
     )
     return HTML(anim.to_html5_video())
+
 
 def inspect_crop_sizes(
     tracks: Dict[str, np.ndarray],
@@ -118,6 +121,7 @@ def inspect_crop_sizes(
 
     return fig
 
+
 def inspect_dataset(
     dataset: torch.utils.data.Dataset,
     num_samples: int = 4,
@@ -150,7 +154,7 @@ def scatter_with_cluster_labels(
     ax: Optional[matplotlib.axes.Axes] = None,
     cmap_name: str = "jet",
     point_size: int = 5,
-    label_fontsize: int = 10
+    label_fontsize: int = 10,
 ) -> matplotlib.axes.Axes:
     """
     Create scatter plot with cluster-based color and text labels at cluster medians.
@@ -184,11 +188,11 @@ def scatter_with_cluster_labels(
             *centroid,
             str(cluster_id),
             fontsize=label_fontsize,
-            ha='center',
-            va='center',
+            ha="center",
+            va="center",
             color=color,
-            bbox=dict(facecolor='white', edgecolor=color, pad=2, alpha=0.8)
+            bbox=dict(facecolor="white", edgecolor=color, pad=2, alpha=0.8),
         )
 
-    ax.axis('off')
+    ax.axis("off")
     return ax

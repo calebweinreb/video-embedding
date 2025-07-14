@@ -5,13 +5,12 @@ import sys
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from functools import partial  
+from functools import partial
 from vidio.read import OpenCVReader
 
 from video_embedding.utils import EmbeddingStore
 from vispy.scene import SceneCanvas
 from vispy.scene.visuals import Markers
-
 
 
 class VideoPlayer(QWidget):
@@ -39,14 +38,15 @@ class VideoPlayer(QWidget):
         self.video_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-
     def update_frame(self):
         if self.video_array is None:
             return
         frame = self.video_array[self.current_frame]
         height, width, channels = frame.shape
         bytes_per_line = channels * width
-        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888).copy()
+        q_image = QImage(
+            frame.data, width, height, bytes_per_line, QImage.Format_RGB888
+        ).copy()
         pixmap = QPixmap.fromImage(q_image).scaled(
             self.video_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
@@ -80,14 +80,14 @@ class VideoPlayer(QWidget):
 
     def _resize_label(self):
         if self.video_array is None:
-            ar = 9/16 # provisional aspect ratio
+            ar = 9 / 16  # provisional aspect ratio
         else:
             h_px, w_px, _ = self.video_array[0].shape
             ar = h_px / w_px
         h = int(round(self.width * ar))
         self.setFixedSize(self.width, h)
         self.video_label.setFixedSize(self.width, h)
-        
+
 
 class VideoPopup(QWidget):
     def __init__(self, video_info, label, main_window):
@@ -113,20 +113,20 @@ class VideoPopup(QWidget):
         # widget layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
-        layout.setSpacing(4) 
+        layout.setSpacing(4)
         layout.addLayout(header)
         layout.addWidget(self.player)
 
         main_window.clip_width_changed.connect(self.set_width)
         self.set_width(main_window.clip_width)
-        self.adjustSize()  
+        self.adjustSize()
 
     def mousePressEvent(self, ev):
         self.close()
 
     def closeEvent(self, ev):
         self.player.clear_video()
-        self.main._popup_closed(self) 
+        self.main._popup_closed(self)
         super().closeEvent(ev)
 
     @Slot(int)
@@ -134,7 +134,6 @@ class VideoPopup(QWidget):
         self.player.set_width(w)
         self.adjustSize()
         self.setFixedWidth(w)
-
 
 
 class VariableSelectDialog(QDialog):
@@ -171,18 +170,17 @@ class VariableSelectDialog(QDialog):
 
 
 class ScatterPlot(QWidget):
-    point_pressed  = Signal(int)
+    point_pressed = Signal(int)
     point_released = Signal(int, Qt.KeyboardModifiers)
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
-        self._points       = np.zeros((0, 2))
-        self._point_size   = 12
-        self._face_colors  = None          # pre-computed RGBA (N,4)
-        self._values       = None          # original column – kept only for re-use
-        self._discrete     = False
-
+        self._points = np.zeros((0, 2))
+        self._point_size = 12
+        self._face_colors = None  # pre-computed RGBA (N,4)
+        self._values = None  # original column – kept only for re-use
+        self._discrete = False
 
         layout = QVBoxLayout(self)
         self.canvas = SceneCanvas(keys="interactive", show=False)
@@ -194,7 +192,7 @@ class ScatterPlot(QWidget):
         self.scatter = Markers(parent=self.view.scene)
         self.view.add(self.scatter)
 
-        self.view.events.mouse_press .connect(self._on_mouse_press)
+        self.view.events.mouse_press.connect(self._on_mouse_press)
         self.view.events.mouse_release.connect(self._on_mouse_release)
 
     def set_data(self, points: np.ndarray):
@@ -216,19 +214,19 @@ class ScatterPlot(QWidget):
         • numeric      → viridis
         """
         if values is None:
-            self._values      = None
-            self._face_colors = None           # will fall back to grey in _update_plot
+            self._values = None
+            self._face_colors = None  # will fall back to grey in _update_plot
             self._update_plot(auto_range=False)
             return
 
-        self._values   = values
+        self._values = values
         self._discrete = values.dtype.kind in ("O", "U", "b", "u")
 
-        if self._discrete:                      # categorical → tab20
+        if self._discrete:  # categorical → tab20
             cats, inv = np.unique(values, return_inverse=True)
             cmap = plt.get_cmap("tab20")
             self._face_colors = cmap(np.linspace(0, 1, len(cats)))[inv]
-        else:                                   # numeric → viridis
+        else:  # numeric → viridis
             v = values.astype(float).to_numpy()
             t = (v - v.min()) / (v.max() - v.min() + 1e-12)
             self._face_colors = plt.get_cmap("viridis")(t)
@@ -246,9 +244,9 @@ class ScatterPlot(QWidget):
             self._face_colors = np.tile([0.7, 0.7, 0.7, 1.0], (len(self._points), 1))
 
         self.scatter.set_data(
-            pos        = self._points,
-            size       = self._point_size,
-            face_color = self._face_colors,
+            pos=self._points,
+            size=self._point_size,
+            face_color=self._face_colors,
         )
         if auto_range:
             xmin, ymin = self._points.min(axis=0)
@@ -257,7 +255,7 @@ class ScatterPlot(QWidget):
         self.canvas.update()
 
     def _nearest_idx_in_radius(self, xy_px: np.ndarray):
-        """Return index of the nearest point if the mouse location lies within the point’s visual 
+        """Return index of the nearest point if the mouse location lies within the point’s visual
         radius; otherwise return None."""
         if not len(self._points):
             return None
@@ -273,7 +271,7 @@ class ScatterPlot(QWidget):
         if idx is not None:
             self.point_pressed.emit(idx)
 
-    def _on_mouse_release(self, ev): 
+    def _on_mouse_release(self, ev):
         if ev.button != 1:
             return
         idx = self._nearest_idx_in_radius(np.array(ev.pos[:2]))
@@ -306,7 +304,8 @@ def set_style(app):
     darktheme.setColor(QPalette.Disabled, QPalette.Base, QColor(32, 32, 32))
     app.setPalette(darktheme)
 
-    app.setStyleSheet("""
+    app.setStyleSheet(
+        """
         /* Closed combo box text + background */
         QComboBox {
             color: white;
@@ -326,7 +325,8 @@ def set_style(app):
         QComboBox::down-arrow {
             width: 10px; height: 10px;
         }
-    """)
+    """
+    )
     return app
 
 
@@ -415,7 +415,7 @@ class MainWindow(QMainWindow):
         # video player popup(s)
         self.clip_scale = 1.0
         self.transient_popup = None
-        self.pinned_popups   = {}
+        self.pinned_popups = {}
 
         if args:
             self.load_embedding_store(args[0])
@@ -451,7 +451,6 @@ class MainWindow(QMainWindow):
         # initial plot (no color)
         self.scatter_plot.set_data(pts)
 
-
     def on_point_size_changed(self, val: int):
         self.scatter_plot.set_point_size(val)
 
@@ -477,21 +476,21 @@ class MainWindow(QMainWindow):
 
     def _popup_key(self, idx):
         x, y = self.df.loc[idx, [self.x_var, self.y_var]]
-        return (x,y)
+        return (x, y)
 
     def _popup_pos(self, idx):
         pt = self._popup_key(idx)
         gpt = self.scatter_plot.data_to_global(pt)
-        return gpt + QPoint(8, 8)       # offset so marker not hidden
+        return gpt + QPoint(8, 8)  # offset so marker not hidden
 
     @Slot(int, Qt.KeyboardModifiers)
     def on_point_released(self, idx: int, mods: Qt.KeyboardModifiers):
         if self.transient_popup is None:
             return
-        if mods & Qt.ShiftModifier:               # keep it → pin
+        if mods & Qt.ShiftModifier:  # keep it → pin
             self.transient_popup.setWindowOpacity(1.0)
             self.pinned_popups[idx] = self.transient_popup
-        else:                                     # drop it
+        else:  # drop it
             self.transient_popup.close()
         self.transient_popup = None
 
@@ -500,20 +499,23 @@ class MainWindow(QMainWindow):
         if self.transient_popup and not self.transient_popup.isHidden():
             self.transient_popup.close()
 
-        info = (self.df.video_path[idx],
-                int(self.df.start_frame[idx]),
-                int(self.df.end_frame[idx]))
+        info = (
+            self.df.video_path[idx],
+            int(self.df.start_frame[idx]),
+            int(self.df.end_frame[idx]),
+        )
         self.transient_popup = VideoPopup(info, f"clip #{idx}", self)
         self.transient_popup.idx = idx
         self.transient_popup.setWindowOpacity(0.9)
         self.transient_popup.move(self._popup_pos(idx))
         self.transient_popup.show()
 
-
     def _spawn_popup(self, idx, transient):
-        info = (self.df.video_path[idx],
-                int(self.df.start_frame[idx]),
-                int(self.df.end_frame[idx]))
+        info = (
+            self.df.video_path[idx],
+            int(self.df.start_frame[idx]),
+            int(self.df.end_frame[idx]),
+        )
         pop = VideoPopup(info, f"clip #{idx}", self)
         pop.idx = idx
         pop.move(self._popup_pos(idx))

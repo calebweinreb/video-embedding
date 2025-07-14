@@ -20,10 +20,12 @@ def transform_video(video_array: np.ndarray) -> torch.Tensor:
     video_array = np.moveaxis(video_array, -1, -4)
     return torch.tensor(video_array)
 
+
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
     """Invert the transformations applied by `transform_video`."""
     video_array = np.moveaxis(video_tensor.numpy(), -4, -1)
     return (video_array * 255.0).astype(np.uint8)
+
 
 def crop_image(
     image: np.ndarray,
@@ -55,18 +57,15 @@ def crop_image(
     half_w, half_h = w // 2, h // 2
 
     # compute how much padding is needed on each side
-    top    = max(half_h - y, 0)
+    top = max(half_h - y, 0)
     bottom = max((y + half_h) - (H - 1), 0)
-    left   = max(half_w - x, 0)
-    right  = max((x + half_w) - (W - 1), 0)
+    left = max(half_w - x, 0)
+    right = max((x + half_w) - (W - 1), 0)
 
     # pad if necessary
     if any((top, bottom, left, right)):
         image = cv2.copyMakeBorder(
-            image,
-            top, bottom, left, right,
-            borderMode=border_mode,
-            value=border_value
+            image, top, bottom, left, right, borderMode=border_mode, value=border_value
         )
         # shift centroid to account for padding
         x += left
@@ -74,7 +73,7 @@ def crop_image(
 
     # now crop exactly w×h around (x, y)
     x0, y0 = x - half_w, y - half_h
-    x1, y1 = x0 + w,     y0 + h
+    x1, y1 = x0 + w, y0 + h
     return image[y0:y1, x0:x1]
 
 
@@ -229,7 +228,7 @@ def load_video_clip(path: str, start: int, end: int) -> np.ndarray:
         Video as array of frames.
     """
     reader = OpenCVReader(path)
-    clip = reader[start : end]
+    clip = reader[start:end]
     return np.stack(clip)
 
 
@@ -258,10 +257,11 @@ def downsample_video(
         )
 
     return video_array
-    
+
 
 class EmbeddingStore:
     """Store for video embeddings and associated metadata."""
+
     REQUIRED_METADATA = {"video_path", "start_frame", "end_frame"}
 
     def __init__(self, embeddings: np.ndarray, metadata: pd.DataFrame):
@@ -285,9 +285,7 @@ class EmbeddingStore:
         # Check required metadata columns
         missing = self.REQUIRED_METADATA - set(self.metadata.columns)
         if missing:
-            raise ValueError(
-                f"Metadata is missing required columns: {sorted(missing)}"
-            )
+            raise ValueError(f"Metadata is missing required columns: {sorted(missing)}")
 
     def save(self, path: str):
         """Save embeddings and metadata to an HDF5 file. Overwrites any existing file."""
@@ -300,13 +298,16 @@ class EmbeddingStore:
                 data = self.metadata[col].values
                 if np.issubdtype(data.dtype, np.str_) or data.dtype == object:
                     data = data.astype(object)
-                    dt = h5py.string_dtype(encoding='utf-8')
-                elif np.issubdtype(data.dtype, np.number) or np.issubdtype(data.dtype, np.bool_):
+                    dt = h5py.string_dtype(encoding="utf-8")
+                elif np.issubdtype(data.dtype, np.number) or np.issubdtype(
+                    data.dtype, np.bool_
+                ):
                     dt = data.dtype
                 else:
-                    raise TypeError(f"Unsupported dtype in column '{col}': {data.dtype}")
+                    raise TypeError(
+                        f"Unsupported dtype in column '{col}': {data.dtype}"
+                    )
                 meta_grp.create_dataset(col, data=data, dtype=dt)
-
 
     def __len__(self) -> int:
         """Return the number of embeddings stored."""
@@ -315,7 +316,9 @@ class EmbeddingStore:
     def get_clip_info(self, index: int) -> Tuple[str, int, int]:
         """Get video clip info (path, start frame, end frame) at a given index."""
         if index < 0 or index >= len(self):
-            raise IndexError(f"Index {index} out of bounds for embeddings of length {len(self)}")
+            raise IndexError(
+                f"Index {index} out of bounds for embeddings of length {len(self)}"
+            )
         row = self.metadata.iloc[index]
         return row["video_path"], row["start_frame"], row["end_frame"]
 
@@ -338,14 +341,14 @@ class EmbeddingStore:
 
 class VideoClipStreamer:
     """Stream video clips of specified duration and spacing (with optional cropping)."""
-    
+
     def __init__(
-        self, 
-        video_path: str, 
-        duration: int, 
+        self,
+        video_path: str,
+        duration: int,
         spacing: int = 1,
         crop_size: Optional[int] = None,
-        track: Optional[np.ndarray] = None
+        track: Optional[np.ndarray] = None,
     ):
         """
         Args:
@@ -360,10 +363,12 @@ class VideoClipStreamer:
         self.reader = OpenCVReader(video_path)
         self.frame_buffer = deque(maxlen=duration)
         self.crop_size = crop_size
-        
+
         if track is None:
             height, width = self.reader[0].shape[1:3]
-            self.track = np.array([[width // 2, height // 2]] * len(self.reader), dtype=int)
+            self.track = np.array(
+                [[width // 2, height // 2]] * len(self.reader), dtype=int
+            )
         else:
             self.track = track
 
@@ -381,7 +386,7 @@ class VideoClipStreamer:
             start_ix = current_ix - self.duration + 1
             if start_ix in self.start_frames:
                 yield np.stack(self.frame_buffer)
-                
+
     def __len__(self) -> int:
         """Return the number of clips that can be generated from the video."""
         return len(self.start_frames)

@@ -65,7 +65,9 @@ class VideoClipDataset(Dataset):
     def __getitem__(self, idx):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
-        frames = load_video_clip(self.video_paths[video_ix], frame_ix, frame_ix + self.duration)
+        frames = load_video_clip(
+            self.video_paths[video_ix], frame_ix, frame_ix + self.duration
+        )
         frames = downsample_video(
             frames, self.temporal_downsample, self.spatial_downsample
         )

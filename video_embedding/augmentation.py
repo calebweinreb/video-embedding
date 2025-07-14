@@ -13,6 +13,7 @@ class VideoAugmentation(ABC):
     Subclasses must implement the `_augment` method to perform
     augmentation on a 4-D video array.
     """
+
     def __call__(self, video_array: np.ndarray) -> np.ndarray:
         """Apply augmentation and validate output shape and dtype.
 
@@ -44,6 +45,7 @@ class VideoAugmentation(ABC):
 
 class TemporalCrop(VideoAugmentation):
     """Randomly crop video along temporal axis to a fixed frame count."""
+
     def __init__(self, target_duration):
         """
         Args:
@@ -67,6 +69,7 @@ class TemporalCrop(VideoAugmentation):
 
 class TranslationDrift(VideoAugmentation):
     """Apply random camera drift to each frame with given probability."""
+
     def __init__(
         self,
         p=0.9,
@@ -120,26 +123,30 @@ class TranslationDrift(VideoAugmentation):
             traj = self.generate_trajectory(
                 duration, self.dof, self.gaussian_kernel, self.multiplier
             )
-            return np.stack([
-                self.translate(frame, dx, dy)
-                for frame, (dx, dy) in zip(video_array, traj)
-            ])
+            return np.stack(
+                [
+                    self.translate(frame, dx, dy)
+                    for frame, (dx, dy) in zip(video_array, traj)
+                ]
+            )
         return video_array
+
 
 class CenterCrop(VideoAugmentation):
     """Spatially center-crop each frame in the video."""
+
     def __init__(
-        self, 
-        crop_size: int, 
-        border_mode: int = cv2.BORDER_REFLECT, 
-        border_value: Union[int, Tuple[int, int, int]] = 0
+        self,
+        crop_size: int,
+        border_mode: int = cv2.BORDER_REFLECT,
+        border_value: Union[int, Tuple[int, int, int]] = 0,
     ):
         """
         Args:
             crop_size: Size of the square crop to apply.
             border_mode: OpenCV border mode for padding (default is cv2.BORDER_REFLECT).
             border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel images.
-            
+
         """
         self.crop_size = crop_size
         self.border_mode = border_mode
@@ -148,13 +155,19 @@ class CenterCrop(VideoAugmentation):
     def _augment(self, video_array: np.ndarray) -> np.ndarray:
         """Crop video frames around their centroid."""
         centroid = (video_array.shape[2] // 2, video_array.shape[1] // 2)
-        return np.stack([
-            crop_image(frame, centroid, self.crop_size, self.border_mode, self.border_value)
-            for frame in video_array
-        ])
+        return np.stack(
+            [
+                crop_image(
+                    frame, centroid, self.crop_size, self.border_mode, self.border_value
+                )
+                for frame in video_array
+            ]
+        )
+
 
 class AlbumentationsAugs(VideoAugmentation):
     """Wrap Albumentations transforms for consistent video augmentation."""
+
     def __init__(self, alb_transforms):
         """
         Args:
@@ -167,7 +180,7 @@ class AlbumentationsAugs(VideoAugmentation):
         """Create an instance with the default Albumentations pipeline."""
         transforms = [
             A.HorizontalFlip(p=0.5),  # Horizontal flip
-            A.VerticalFlip(p=0.5),    # Vertical flip
+            A.VerticalFlip(p=0.5),  # Vertical flip
             A.Affine(
                 translate_percent=0.05,
                 scale=(0.8, 1.1),
@@ -200,6 +213,7 @@ class AlbumentationsAugs(VideoAugmentation):
 
 class VideoAugmentator:
     """Compose multiple video augmentations into a single pipeline."""
+
     def __init__(self, augmentations):
         """
         Args:
