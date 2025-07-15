@@ -329,20 +329,18 @@ class VideoEmbedder(torch.nn.Module):
                 ]
             )
 
-        # downsample video in time and space
+        # downsample and transform video
         video = downsample_video(
             video,
             temporal_downsample=self.temporal_downsample,
             spatial_downsample=self.spatial_downsample,
         )
-
-        # normalize and transform video to tensor
         video_tensor = transform_video(video)
 
-        # embed using the backbone
+        # embed video
         with torch.no_grad():
             video_tensor = video_tensor.to(self.device).unsqueeze(0)
-            features = self.backbone(video_tensor).squeeze(0)
+            features = self.embedding_nodel(video_tensor).squeeze(0)
         return features.detach().cpu().numpy()
 
 
