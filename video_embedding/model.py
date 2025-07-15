@@ -1,5 +1,6 @@
 import torch
-from typing import Tuple, Union, Optional
+from typing import Tuple, Union, Optional, Literal
+from dataclasses import dataclass, asdict
 from torchvision import models
 import numpy as np
 import os
@@ -12,6 +13,67 @@ from .utils import (
     crop_image,
 )
 
+@dataclass
+class EmbeddingConfig:
+    """Configuration for video embedding model."""
+    backbone_type: Literal["s3d"] = "s3d"  # currently only supports S3D
+    head_type: Literal["linear", "mlp", "none"] = "linear"
+    out_dim: Optional[int] = 64  # only used if head is not "none"
+    hidden_dim: Optional[int] = 256  # only used if head is "mlp"
+    frozen_backbone: bool = True  # whether to freeze the backbone during training
+
+
+@dataclass
+class BarlowTwinsConfig:
+    """Configuration for Barlow Twins model."""
+    projection_dim: int = 128
+    hidden_dim: int = 512
+    lamda: float = 0.001
+
+
+def save_config(
+    training_dir: str,
+    embedding_config: EmbeddingConfig,
+    barlow_twins_config: BarlowTwinsConfig,
+    crop_size: int,
+    duration: int,
+    temporal_downsample: float = 1.0,
+    spatial_downsample: float = 1.0,
+    overwrite: bool = False,
+) -> None:
+    """Saves configuration parameters of a video embedding model.
+
+    Args:
+        training_dir: Directory where the model config is saved.
+        embedding_config: Configuration for the embedding model.
+        barlow_twins_config: Configuration for the Barlow Twins model.
+        crop_size: Crop size used during training (before spatial downsampling).
+        duration: Clip duration used during training (before temporal downsampling).
+        temporal_downsample: Temporal downsampling factor.
+        spatial_downsample: Spatial downsampling factor.
+        overwrite: If True, overwrites existing configuration file.
+    """
+    config_path = os.path.join(training_dir, "config.json")
+
+    config = {
+        "embedding_config": asdict(embedding_config),
+        "barlow_twins_config": asdict(barlow_twins_config),
+        "crop_size": crop_size,
+        "duration": duration,
+        "temporal_downsample": temporal_downsample,
+        "spatial_downsample": spatial_downsample,
+    }
+    if not overwrite and os.path.exists(config_path):
+        raise FileExistsError(
+            f"Configuration file {config_path} already exists. Set overwrite=True to replace it."
+        )
+    else:
+        print(f"Saving model configuration to {config_path}")
+        with open(config_path, "w") as f:
+            json.dump(config, f, indent=4)
+
+
+
 
 class BarlowTwins(torch.nn.Module):
     """Barlow Twins model for self-supervised learning of video representations.
@@ -21,44 +83,29 @@ class BarlowTwins(torch.nn.Module):
         - Code: https://arxiv.org/abs/2104.02057
     """
 
-    def __init__(
-        self,
-        backbone: torch.nn.Module,
-        feature_size: int,
-        projection_dim: int = 1024,
-        hidden_dim: int = 1024,
-        lamda: float = 0.001,
-    ):
+    def __init__(self, config: BarlowTwinsConfig, embedding_model: torch.nn.Module):
         """
         Args:
-            backbone: Feature extractor.
-            feature_size: Size of the features output by the backbone.
-            projection_dim: Output dimension of the projector MLP.
-            hidden_dim: Hidden layer dimension in the projector.
-            lamda: Weighting for the off-diagonal loss term.
+            config: Configuration for Barlow Twins model.
+            embedding_model: Embedding model that extracts features from video clips.
         """
         super().__init__()
-        self.lamda = lamda
-        self.backbone = backbone  # feature extractor
-
-        # neural network mapping extracted features into space suitable for BT loss
-        self.projector = Projector(feature_size, hidden_dim, projection_dim)
-
-        # combines backbone and projector into one "encoder" model
-        self.encoder = torch.nn.Sequential(self.backbone, self.projector)
-
-        self.bn = torch.nn.BatchNorm1d(projection_dim, affine=False)
+        self.embedding_model = embedding_model
+        self.lamda = config.lamda
+        self.projector = Projector(
+            embedding_model.feature_size, config.hidden_dim, config.projection_dim
+        )
+        self.encoder = torch.nn.Sequential(self.embedding_model, self.projector)
+        self.bn = torch.nn.BatchNorm1d(config.projection_dim, affine=False)
 
     def forward(self, x1, x2):  # two augmented versions of the same input
         """Compute Barlow Twins loss for a pair of augmented clips."""
-
-        # pass both inputs through encoder
+        # compute cross-correlation matrix
         z1, z2 = self.encoder(x1), self.encoder(x2)
-
-        # compute cross-correlation matrix between normalized outputs
         c = self.bn(z1).T @ self.bn(z2)
         c.div_(z1.shape[0])
 
+        # compute Barlow Twins loss
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = off_diagonal(c).pow_(2).sum()
         loss = on_diag + self.lamda * off_diag
@@ -66,7 +113,7 @@ class BarlowTwins(torch.nn.Module):
 
 
 class Projector(torch.nn.Module):
-    """Maps high-dim features from backbone into a space where Barlow Twins loss can be applied."""
+    """Maps from embedding space to a projection space where Barlow Twins loss can be applied."""
 
     def __init__(self, in_dim: int, hidden_dim: int = 512, out_dim: int = 128):
         """
@@ -94,7 +141,6 @@ class Projector(torch.nn.Module):
 
     def forward(self, x):
         """Forward pass of the projection head."""
-
         x = self.layer1(x)
         x = self.layer2(x)
         x = self.layer3(x)
@@ -124,43 +170,58 @@ class NormalizeInput(torch.nn.Module):
         return (x - self.mean) / self.std
 
 
-def get_embedding_model(name: str = "s3d") -> Tuple[torch.nn.Module, int]:
-    """Get a pre-trained video embedding model based on the specified name.
-
-    Note: inputs should be [0, 1] normalized RGB tensors of shape (B, C, T, H, W).
-
-    Args:
-        name: Name of the model to retrieve. Currently only "s3d" is supported.
-        device: Device on which to place the normalization buffers.
-
-    Returns:
-        Tuple of:
-            - Model: Pre-trained embedding model with normalization prepended.
-            - feature_size: Dimensionality of extracted features.
+def get_embedding_model(config: EmbeddingConfig) -> torch.nn.Module:
+    """Build a video embedding model from a config. 
+        - Models are contructed from a (pre-trained) backbone and optional linear/MLP head.
+        - Inputs to the model should be 5D tensors of shape (B, C, T, H, W).
     """
-    if name == "s3d":
-        # Instantiate S3D
-        model = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
-        model.avgpool = torch.nn.Identity()
-        model.classifier = torch.nn.Identity()
+    # Create backbone
+    if config.backbone_type == "s3d":
+        # Instantiate pre-trained S3D
+        backbone = models.video.s3d(weights=models.video.S3D_Weights.DEFAULT)
+        backbone.avgpool = torch.nn.Identity()
+        backbone.classifier = torch.nn.Identity()
         feature_size = 1024
 
-        # Define normalization layer
+        # Prepend normalization layer
         mean = torch.tensor([0.485, 0.456, 0.406]).view(1, 3, 1, 1, 1)
         std = torch.tensor([0.229, 0.224, 0.225]).view(1, 3, 1, 1, 1)
         norm = NormalizeInput(mean, std)
-
-        # Combine into one sequential model
-        model = torch.nn.Sequential(norm, model)
-
+        backbone = torch.nn.Sequential(norm, backbone)
     else:
-        raise ValueError(f"Model {name} is not supported.")
+        raise ValueError(f"Backbone {config.backbone_type} is not supported.")
 
-    return model, feature_size
+    # Optionally freeze the backbone
+    if config.frozen_backbone:
+        for param in backbone.parameters():
+            param.requires_grad = False
+
+    # Create head
+    if config.head_type == "linear":
+        head = torch.nn.Linear(feature_size, config.out_dim)
+        feature_size = config.out_dim
+    elif config.head_type == "mlp":
+        head = torch.nn.Sequential(
+            torch.nn.Linear(feature_size, config.hidden_dim, bias=False),
+            torch.nn.BatchNorm1d(config.hidden_dim), 
+            torch.nn.GELU(),
+            torch.nn.Linear(config.hidden_dim, config.out_dim, bias=False),
+            torch.nn.BatchNorm1d(config.out_dim)
+        )
+        feature_size = config.out_dim
+    elif config.head_type == "none":
+        head = torch.nn.Identity()
+    else:
+        raise ValueError(f"Head type {config.head_type} is not supported.")
+
+    # Combine backbone and head
+    embedding_model = torch.nn.Sequential(backbone, head)
+    embedding_model.feature_size = feature_size
+    return embedding_model
 
 
 class VideoEmbedder(torch.nn.Module):
-    """Class for preprocessing and embedding video clips using a trained backbone.
+    """Class for preprocessing and embedding video clips.
 
     The module can be instantiated directly with a backbone and preprocessing parameters or
     constructed from a saved training run that includes a model configuration and checkpoints.
@@ -168,7 +229,7 @@ class VideoEmbedder(torch.nn.Module):
 
     def __init__(
         self,
-        backbone: torch.nn.Module,
+        embedding_model: torch.nn.Module,
         crop_size: int,
         duration: int,
         temporal_downsample: float = 1.0,
@@ -177,7 +238,7 @@ class VideoEmbedder(torch.nn.Module):
     ):
         """
         Args:
-            backbone: Trained video embedding model.
+            embedding_model: Trained video embedding model.
             crop_size: Crop size to apply to input video clips (prior to spatial downsampling).
             duration: Duration of input video clips in frames (prior to temporal downsampling).
             temporal_downsample: Factor by which to downsample in time.
@@ -185,7 +246,7 @@ class VideoEmbedder(torch.nn.Module):
             device: Device on which embeddings should be computed.
         """
         super().__init__()
-        self.backbone = backbone.to(device).eval()
+        self.embedding_model = embedding_model.to(device).eval()
         self.crop_size = crop_size
         self.duration = duration
         self.temporal_downsample = temporal_downsample
@@ -213,7 +274,10 @@ class VideoEmbedder(torch.nn.Module):
         with open(config_file, "r") as f:
             cfg = json.load(f)
 
-        backbone, feature_size = get_embedding_model(cfg["model_name"])
+        embedding_cfg = EmbeddingConfig(**cfg["embedding_config"])
+        barlow_twins_cfg = BarlowTwinsConfig(**cfg["barlow_twins_config"])
+
+        embedding_model = get_embedding_model(embedding_cfg)
         if checkpoint_path is None:
             checkpoint_dir = os.path.join(training_dir, "checkpoints")
             checkpoint_path = get_latest_checkpoint(checkpoint_dir)
@@ -221,12 +285,12 @@ class VideoEmbedder(torch.nn.Module):
                 raise FileNotFoundError(f"No checkpoints found in {checkpoint_dir}")
 
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        learner = BarlowTwins(backbone, feature_size)
+        learner = BarlowTwins(barlow_twins_cfg, embedding_model)
         learner.load_state_dict(checkpoint["learner_state_dict"])
-        backbone = learner.backbone
+        embedding_model = learner.embedding_model
 
         return cls(
-            backbone=backbone,
+            embedding_model=embedding_model,
             crop_size=cfg["crop_size"],
             duration=cfg["duration"],
             temporal_downsample=cfg["temporal_downsample"],
@@ -280,3 +344,5 @@ class VideoEmbedder(torch.nn.Module):
             video_tensor = video_tensor.to(self.device).unsqueeze(0)
             features = self.backbone(video_tensor).squeeze(0)
         return features.detach().cpu().numpy()
+
+
