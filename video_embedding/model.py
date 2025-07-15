@@ -340,7 +340,7 @@ class VideoEmbedder(torch.nn.Module):
         # embed video
         with torch.no_grad():
             video_tensor = video_tensor.to(self.device).unsqueeze(0)
-            features = self.embedding_nodel(video_tensor).squeeze(0)
+            features = self.embedding_model(video_tensor).squeeze(0)
         return features.detach().cpu().numpy()
 
 
