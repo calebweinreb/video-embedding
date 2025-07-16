@@ -119,12 +119,13 @@ class BarlowTwins(torch.nn.Module):
         c = (y.repeat(2, 1).T @ z_cat) / z_cat.shape[0]
         return (c**2).mean() * self.nuisance_lambda
 
-    def forward(self, x1, x2, nuisance_var=None):
+    def forward(self, x1, x2, nuisance_var):
         """Compute Barlow Twins loss and (optionally) nuisance loss."""
         z1 = self.bn(self.encoder(x1))
         z2 = self.bn(self.encoder(x2))
         barlow_loss = self._barlow_loss(z1, z2)
-        if nuisance_var is not None:
+
+        if nuisance_var.numel() > 0:
             nuisance_loss = self._nuisance_loss(z1, z2, nuisance_var)
         else:
             nuisance_loss = torch.tensor(0.0, device=x1.device)

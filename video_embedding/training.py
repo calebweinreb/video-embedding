@@ -77,9 +77,11 @@ class VideoClipDataset(Dataset):
     def __getitem__(self, idx):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
-        nuisance_var = (
-            None if self.nuisance_variables is None else self.nuisance_variables[idx]
-        )
+
+        if self.nuisance_variables is None:
+            nuisance_var = torch.empty(0, dtype=torch.float32)
+        else:
+            nuisance_var = self.nuisance_variables[idx]
 
         frames = load_video_clip(
             self.video_paths[video_ix], frame_ix, frame_ix + self.duration
@@ -156,12 +158,11 @@ def train(
             tepoch.set_description(f"Epoch {epoch}/{num_epochs}")
 
             for i in tepoch:
-                x_one, x_two, nuisance_var = next(loader)
+                x_one, x_two, nu_var = next(loader)
                 x_one = x_one.to(device)
                 x_two = x_two.to(device)
-                if nuisance_var is not None:
-                    nuisance_var = nuisance_var.to(device)
-                losses = learner(x_one, x_two, nuisance_var)
+                nu_var = nu_var.to(device)
+                losses = learner(x_one, x_two, nu_var)
 
                 total_loss = 0.0
                 for name, loss in losses.items():
