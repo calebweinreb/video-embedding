@@ -32,7 +32,7 @@ class BarlowTwinsConfig:
     projection_dim: int = 128
     hidden_dim: int = 512
     barlow_lambda: float = 1e-3
-    nuisance_lambda: float = 1e-3
+    nuisance_lambda: float = 1e4
 
 
 def save_config(
@@ -117,16 +117,18 @@ class BarlowTwins(torch.nn.Module):
         z_cat = z_cat - z_cat.mean(dim=0, keepdim=True)
         y = nuisance_var - nuisance_var.mean(dim=0, keepdim=True)
         c = (y.repeat(2, 1).T @ z_cat) / z_cat.shape[0]
-        return (c**2).sum() * self.nuisance_lambda
+        return (c**2).mean() * self.nuisance_lambda
 
     def forward(self, x1, x2, nuisance_var=None):
         """Compute Barlow Twins loss and (optionally) nuisance loss."""
         z1 = self.bn(self.encoder(x1))
         z2 = self.bn(self.encoder(x2))
-        loss = self._barlow_loss(z1, z2)
+        barlow_loss = self._barlow_loss(z1, z2)
         if nuisance_var is not None:
-            loss += self._nuisance_loss(z1, z2, nuisance_var)
-        return loss
+            nuisance_loss = self._nuisance_loss(z1, z2, nuisance_var)
+        else:
+            nuisance_loss = torch.tensor(0.0, device=x1.device)
+        return {"barlow_loss": barlow_loss, "nuisance_loss": nuisance_loss}
 
 
 class Projector(torch.nn.Module):

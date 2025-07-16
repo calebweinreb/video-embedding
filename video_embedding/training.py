@@ -145,7 +145,11 @@ def train(
 
     learner = learner.to(device).train()
     for epoch in range(start_epoch, num_epochs):
-        running_loss = 0.0
+        running_losses = {
+            "barlow_loss": 0.0,
+            "nuisance_loss": 0.0,
+            "total_loss": 0.0,
+        }
         loader = iter(dataloader)
 
         with tqdm.trange(steps_per_epoch, unit="batch") as tepoch:
@@ -157,20 +161,28 @@ def train(
                 x_two = x_two.to(device)
                 if nuisance_var is not None:
                     nuisance_var = nuisance_var.to(device)
+                losses = learner(x_one, x_two, nuisance_var)
 
-                loss = learner(x_one, x_two, nuisance_var)
+                total_loss = 0.0
+                for name, loss in losses.items():
+                    total_loss += loss
+                    running_losses[name] += loss.item()
+                running_losses["total_loss"] += total_loss.item()
+
                 optimizer.zero_grad()
-                loss.backward()
+                total_loss.backward()
                 optimizer.step()
+                tepoch.set_postfix(
+                    {k: v / (i + 1) for k, v in running_losses.items()}
+                )
 
-                running_loss += loss.item()
-                tepoch.set_postfix(loss=running_loss / (i + 1))
-
-        avg_loss = running_loss / steps_per_epoch
+        avg_loss = running_losses["total_loss"] / steps_per_epoch
         scheduler.step(avg_loss)
 
         with open(loss_log, "a") as f:
-            f.write(f"{epoch},{avg_loss}\n")
+            f.write(f"{epoch}," + ",".join(
+                f"{running_losses[k] / steps_per_epoch:.4f}" for k in running_losses
+            ) + "\n")
 
         torch.save(
             {
