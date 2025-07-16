@@ -13,9 +13,11 @@ from .utils import (
     crop_image,
 )
 
+
 @dataclass
 class EmbeddingConfig:
     """Configuration for video embedding model."""
+
     backbone_type: Literal["s3d"] = "s3d"  # currently only supports S3D
     head_type: Literal["linear", "mlp", "none"] = "linear"
     out_dim: Optional[int] = 64  # only used if head is not "none"
@@ -26,9 +28,11 @@ class EmbeddingConfig:
 @dataclass
 class BarlowTwinsConfig:
     """Configuration for Barlow Twins model."""
+
     projection_dim: int = 128
     hidden_dim: int = 512
-    lamda: float = 0.001
+    barlow_lambda: float = 1e-3
+    nuisance_lambda: float = 1e-3
 
 
 def save_config(
@@ -73,8 +77,6 @@ def save_config(
             json.dump(config, f, indent=4)
 
 
-
-
 class BarlowTwins(torch.nn.Module):
     """Barlow Twins model for self-supervised learning of video representations.
 
@@ -91,24 +93,39 @@ class BarlowTwins(torch.nn.Module):
         """
         super().__init__()
         self.embedding_model = embedding_model
-        self.lamda = config.lamda
+        self.barlow_lambda = config.barlow_lambda
+        self.nuisance_lambda = config.nuisance_lambda
         self.projector = Projector(
             embedding_model.feature_size, config.hidden_dim, config.projection_dim
         )
         self.encoder = torch.nn.Sequential(self.embedding_model, self.projector)
         self.bn = torch.nn.BatchNorm1d(config.projection_dim, affine=False)
 
-    def forward(self, x1, x2):  # two augmented versions of the same input
-        """Compute Barlow Twins loss for a pair of augmented clips."""
-        # compute cross-correlation matrix
-        z1, z2 = self.encoder(x1), self.encoder(x2)
-        c = self.bn(z1).T @ self.bn(z2)
+    def _barlow_loss(self, z1: torch.Tensor, z2: torch.Tensor) -> torch.Tensor:
+        """Compute Barlow Twins loss for a pair of embeddings."""
+        c = z1.T @ z2
         c.div_(z1.shape[0])
-
-        # compute Barlow Twins loss
         on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
         off_diag = off_diagonal(c).pow_(2).sum()
-        loss = on_diag + self.lamda * off_diag
+        return on_diag + self.barlow_lambda * off_diag
+
+    def _nuisance_loss(
+        self, z1: torch.Tensor, z2: torch.Tensor, nuisance_var: torch.Tensor
+    ) -> torch.Tensor:
+        """Compute domain decorrelation loss for nuisance variables."""
+        z_cat = torch.cat([z1, z2], dim=0)
+        z_cat = z_cat - z_cat.mean(dim=0, keepdim=True)
+        y = nuisance_var - nuisance_var.mean(dim=0, keepdim=True)
+        c = (y.repeat(2, 1).T @ z_cat) / z_cat.shape[0]
+        return (c**2).sum() * self.nuisance_lambda
+
+    def forward(self, x1, x2, nuisance_var=None):
+        """Compute Barlow Twins loss and (optionally) nuisance loss."""
+        z1 = self.bn(self.encoder(x1))
+        z2 = self.bn(self.encoder(x2))
+        loss = self._barlow_loss(z1, z2)
+        if nuisance_var is not None:
+            loss += self._nuisance_loss(z1, z2, nuisance_var)
         return loss
 
 
@@ -171,9 +188,9 @@ class NormalizeInput(torch.nn.Module):
 
 
 def get_embedding_model(config: EmbeddingConfig) -> torch.nn.Module:
-    """Build a video embedding model from a config. 
-        - Models are contructed from a (pre-trained) backbone and optional linear/MLP head.
-        - Inputs to the model should be 5D tensors of shape (B, C, T, H, W).
+    """Build a video embedding model from a config.
+    - Models are contructed from a (pre-trained) backbone and optional linear/MLP head.
+    - Inputs to the model should be 5D tensors of shape (B, C, T, H, W).
     """
     # Create backbone
     if config.backbone_type == "s3d":
@@ -203,10 +220,10 @@ def get_embedding_model(config: EmbeddingConfig) -> torch.nn.Module:
     elif config.head_type == "mlp":
         head = torch.nn.Sequential(
             torch.nn.Linear(feature_size, config.hidden_dim, bias=False),
-            torch.nn.BatchNorm1d(config.hidden_dim), 
+            torch.nn.BatchNorm1d(config.hidden_dim),
             torch.nn.GELU(),
             torch.nn.Linear(config.hidden_dim, config.out_dim, bias=False),
-            torch.nn.BatchNorm1d(config.out_dim)
+            torch.nn.BatchNorm1d(config.out_dim),
         )
         feature_size = config.out_dim
     elif config.head_type == "none":
@@ -342,5 +359,3 @@ class VideoEmbedder(torch.nn.Module):
             video_tensor = video_tensor.to(self.device).unsqueeze(0)
             features = self.embedding_model(video_tensor).squeeze(0)
         return features.detach().cpu().numpy()
-
-

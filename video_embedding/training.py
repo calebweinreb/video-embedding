@@ -7,7 +7,7 @@ import json
 import glob
 import re
 from torch.utils.data import Dataset, DataLoader
-from typing import Tuple, Union, List, Optional
+from typing import Tuple, Union, List, Optional, Literal
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import _LRScheduler
 from .model import BarlowTwins, Projector, off_diagonal
@@ -33,7 +33,7 @@ class VideoClipDataset(Dataset):
         duration: int,
         temporal_downsample: int = 1,
         spatial_downsample: float = 1.0,
-        device: str = "cuda",
+        nuisance_variables: Optional[List[np.ndarray]] = None,
     ):
         """
         Args:
@@ -42,22 +42,34 @@ class VideoClipDataset(Dataset):
             duration: Duration of loaded video clips prior to augmentation.
             temporal_downsample: Factor by which to reduce time dimension (prior to augmentation).
             spatial_downsample: Factor by which to reduce space dimensions (prior to augmentation).
-            device: Device on which the dataset will be used.
+            nuisance_variables: Variables associated with videos (will return value at first frame)
         """
         self.temporal_downsample = temporal_downsample
         self.spatial_downsample = spatial_downsample
         self.video_paths = video_paths
         self.augmentator = augmentator
         self.duration = duration
-        self.device = device
 
         lengths = [len(OpenCVReader(p)) for p in video_paths]
+
         self.video_ixs = np.hstack(
             [torch.ones(n - duration) * i for i, n in enumerate(lengths)]
         ).astype(int)
+
         self.frame_ixs = np.hstack(
             [torch.arange(n - duration) for i, n in enumerate(lengths)]
         ).astype(int)
+
+        if nuisance_variables is not None:
+            if [len(nv) for nv in nuisance_variables] != lengths:
+                raise ValueError(
+                    "Nuisance variables must have the same length as the number of frames in each video."
+                )
+            self.nuisance_variables = torch.tensor(
+                np.vstack([nv[:-duration] for nv in nuisance_variables])
+            ).float()
+        else:
+            self.nuisance_variables = None
 
     def __len__(self):
         return len(self.video_ixs)
@@ -65,6 +77,10 @@ class VideoClipDataset(Dataset):
     def __getitem__(self, idx):
         video_ix = self.video_ixs[idx]
         frame_ix = self.frame_ixs[idx]
+        nuisance_var = (
+            None if self.nuisance_variables is None else self.nuisance_variables[idx]
+        )
+
         frames = load_video_clip(
             self.video_paths[video_ix], frame_ix, frame_ix + self.duration
         )
@@ -73,7 +89,7 @@ class VideoClipDataset(Dataset):
         )
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
-        return x_one, x_two
+        return x_one, x_two, nuisance_var
 
 
 def train(
@@ -136,11 +152,13 @@ def train(
             tepoch.set_description(f"Epoch {epoch}/{num_epochs}")
 
             for i in tepoch:
-                x_one, x_two = next(loader)
+                x_one, x_two, nuisance_var = next(loader)
                 x_one = x_one.to(device)
                 x_two = x_two.to(device)
+                if nuisance_var is not None:
+                    nuisance_var = nuisance_var.to(device)
 
-                loss = learner(x_one, x_two)
+                loss = learner(x_one, x_two, nuisance_var)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -162,4 +180,28 @@ def train(
                 "scheduler_state_dict": scheduler.state_dict(),
             },
             os.path.join(checkpoint_dir, f"checkpoint_{epoch}.pth"),
+        )
+
+
+def generate_nuisance_variables(
+    video_paths: List[str],
+    feature: Literal["video_of_origin"] = "video_of_origin",
+) -> List[np.ndarray]:
+    """
+    Convenience function to generate nuisance variables from videos.
+
+    Currently the only supported type is "video_of_origin", which returns a one-hot encoding that
+    specifies the video-of-origin for each frame.
+    """
+    if feature == "video_of_origin":
+        nuisance_variables = []
+        for video_ix, video_path in enumerate(video_paths):
+            n_frames = len(OpenCVReader(video_path))
+            one_hot = np.zeros((n_frames, len(video_paths)), dtype=np.float32)
+            one_hot[:, video_ix] = 1.0
+            nuisance_variables.append(one_hot)
+        return nuisance_variables
+    else:
+        raise ValueError(
+            f"Unsupported feature type: {feature}. Supported: 'video_of_origin'."
         )

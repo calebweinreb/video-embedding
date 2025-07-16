@@ -330,6 +330,7 @@ class VideoClipStreamer:
         """Return the number of clips that can be generated from the video."""
         return len(self.start_frames)
 
+
 def _extract_epoch(path: str) -> int:
     """Extract epoch from checkpoint filename."""
     match = re.search(r"checkpoint_(\d+)\.pth", os.path.basename(path))

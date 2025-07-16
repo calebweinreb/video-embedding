@@ -142,7 +142,7 @@ def inspect_dataset(
             f"Dataset size {len(dataset)} is less than requested number of samples {num_samples}."
         )
     sample_ixs = np.random.choice(len(dataset), num_samples, replace=False)
-    x_one, x_two = zip(*[dataset[i] for i in sample_ixs])
+    x_one, x_two, nuisance_var = zip(*[dataset[i] for i in sample_ixs])
     x_one = untransform_video(torch.stack(x_one))
     x_two = untransform_video(torch.stack(x_two))
     return play_videos(np.concatenate([x_one, x_two]), 2, num_samples, inches)
