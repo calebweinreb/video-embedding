@@ -22,6 +22,7 @@ from .utils import (
 )
 from .augmentation import VideoAugmentator
 
+LOSSES = ["barlow_loss", "nuisance_loss", "total_loss"]
 
 class VideoClipDataset(Dataset):
     """Class for loading video clips and applying augmentations."""
@@ -128,11 +129,12 @@ def train(
     os.makedirs(checkpoint_dir, exist_ok=True)
     print(f"Saving checkpoints to {checkpoint_dir}")
 
+    z
     loss_log = os.path.join(training_dir, "loss_log.csv")
     print(f"Saving losses to {loss_log}")
     if not os.path.exists(loss_log):
         with open(loss_log, "w") as f:
-            f.write("epoch,loss\n")
+            f.write(",".join(["epoch"] + LOSSES) + "\n")
 
     latest_checkpoint = get_latest_checkpoint(checkpoint_dir)
     if latest_checkpoint:
@@ -147,11 +149,7 @@ def train(
 
     learner = learner.to(device).train()
     for epoch in range(start_epoch, num_epochs):
-        running_losses = {
-            "barlow_loss": 0.0,
-            "nuisance_loss": 0.0,
-            "total_loss": 0.0,
-        }
+        running_losses = {name: 0.0 for name in LOSSES}
         loader = iter(dataloader)
 
         with tqdm.trange(steps_per_epoch, unit="batch") as tepoch:
@@ -182,7 +180,7 @@ def train(
 
         with open(loss_log, "a") as f:
             f.write(f"{epoch}," + ",".join(
-                f"{running_losses[k] / steps_per_epoch:.4f}" for k in running_losses
+                f"{running_losses[name] / steps_per_epoch:.4f}" for name in LOSSES
             ) + "\n")
 
         torch.save(
