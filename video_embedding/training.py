@@ -129,7 +129,6 @@ def train(
     os.makedirs(checkpoint_dir, exist_ok=True)
     print(f"Saving checkpoints to {checkpoint_dir}")
 
-    z
     loss_log = os.path.join(training_dir, "loss_log.csv")
     print(f"Saving losses to {loss_log}")
     if not os.path.exists(loss_log):
