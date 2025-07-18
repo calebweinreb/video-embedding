@@ -393,6 +393,7 @@ class MainWindow(QMainWindow):
 
         # color‐by dropdown
         self.color_combo = QComboBox()
+        self.color_combo.setFixedWidth(150)
         self.color_combo.addItem("(No color)")
         self.color_combo.currentTextChanged.connect(self.on_color_changed)
         button_layout.addWidget(make_labeled_widget("Color by:", self.color_combo))
