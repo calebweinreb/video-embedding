@@ -63,7 +63,7 @@ class VideoClipDataset(Dataset):
         frames = downsample_video(frames, self.temporal_downsample, self.spatial_downsample)
         x_one = transform_video(self.augmentator(frames))
         x_two = transform_video(self.augmentator(frames))
-        return x_one, x_two
+        return x_one.clone(), x_two.clone()
 
     @staticmethod
     def _get_indexes(
