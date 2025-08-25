@@ -7,6 +7,7 @@ import imageio
 import tqdm
 import h5py
 import os
+import cv2
 import json
 import re
 import glob
@@ -14,70 +15,66 @@ from collections import deque
 
 
 def transform_video(video_array: np.ndarray) -> torch.Tensor:
-    """Normalize video clip, permute dimensions, and convert to tensor.
-
-    Args:
-        video_array: 4D or 5D array of video frames with shape ([B], T, H, W, C).
-
-    Returns:
-        4D or 5D [0-1] normalized tensor with shape ([B], C, T, H, W).
-    """
+    """Permute axes (… T H W C) → (… C T H W), 0-1 normalize, and return as contiguous tensor."""
     video_array = video_array.astype(np.float32) / 255.0
-    if video_array.ndim == 4:
-        video_array = np.transpose(video_array, (3, 0, 1, 2))  # (C, T, H, W)
-    elif video_array.ndim == 5:
-        video_array = np.transpose(video_array, (0, 4, 1, 2, 3))  # (B, C, T, H, W)
-    video_tensor = torch.from_numpy(video_array)
-    return video_tensor
+    video_array = np.moveaxis(video_array, -1, -4)
+    return torch.tensor(video_array)
 
 
 def untransform_video(video_tensor: torch.Tensor) -> np.ndarray:
-    """Invert the transformations applied by `transform_video`.
-
-    Args:
-        video_tensor: 4D or 5D tensor with shape ([B], C, T, H, W) and values in [0, 1].
-
-    Returns:
-        4D or 5D array of video frames with shape ([B], T, H, W, C) and values in [0, 255].
-    """
-    if video_tensor.ndim == 4:
-        video_array = video_tensor.permute(1, 2, 3, 0).numpy()
-    elif video_tensor.ndim == 5:
-        video_array = video_tensor.permute(0, 2, 3, 4, 1).numpy()
-    video_array = (video_array * 255.0).astype(np.uint8)  # Convert to [0, 255]
-    return video_array
+    """Invert the transformations applied by `transform_video`."""
+    video_array = np.moveaxis(video_tensor.numpy(), -4, -1)
+    return (video_array * 255.0).astype(np.uint8)
 
 
 def crop_image(
-    image: np.ndarray, centroid: Tuple[int, int], crop_size: Union[int, Tuple[int, int]]
+    image: np.ndarray,
+    centroid: Tuple[int, int],
+    crop_size: Union[int, Tuple[int, int]],
+    border_mode: int = cv2.BORDER_REFLECT,
+    border_value: Union[int, Tuple[int, int, int]] = 0,
 ) -> np.ndarray:
-    """Crop an image around a centroid.
+    """Crop an image around a centroid, using OpenCV border modes for padding.
 
     Args:
-        image: Image to crop as array of shape ``(H, W, C)`` or ``(H, W)``.
-        centroid: Tuple of ``(x, y)`` coordinates representing the centroid around which to crop.
-        crop_size: Size of the crop. If an integer is provided, it will crop a square of that size.
+        image:       Input image, shape (H, W) or (H, W, C).
+        centroid:    (x, y) coordinates of the crop center.
+        crop_size:   Either an int (square) or (width, height).
+        border_mode: OpenCV border mode (e.g. cv2.BORDER_REFLECT).
+        border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel.
 
     Returns:
-        Cropped image as array of shape ``(H', W', C)`` or ``(H', W')``.
+        Cropped patch of size exactly (height, width, ...) or (height, width).
     """
+    # determine crop width and height
     if isinstance(crop_size, tuple):
         w, h = crop_size
     else:
-        w, h = crop_size, crop_size
+        w = h = crop_size
+
     x, y = int(centroid[0]), int(centroid[1])
+    H, W = image.shape[:2]
+    half_w, half_h = w // 2, h // 2
 
-    x_min = max(0, x - w // 2)
-    y_min = max(0, y - h // 2)
-    x_max = min(image.shape[1], x + w // 2)
-    y_max = min(image.shape[0], y + h // 2)
+    # compute how much padding is needed on each side
+    top = max(half_h - y, 0)
+    bottom = max((y + half_h) - (H - 1), 0)
+    left = max(half_w - x, 0)
+    right = max((x + half_w) - (W - 1), 0)
 
-    cropped = image[y_min:y_max, x_min:x_max]
-    padded = np.zeros((h, w, *image.shape[2:]), dtype=image.dtype)
-    pad_x = max(w // 2 - x, 0)
-    pad_y = max(h // 2 - y, 0)
-    padded[pad_y : pad_y + cropped.shape[0], pad_x : pad_x + cropped.shape[1]] = cropped
-    return padded
+    # pad if necessary
+    if any((top, bottom, left, right)):
+        image = cv2.copyMakeBorder(
+            image, top, bottom, left, right, borderType=border_mode, value=border_value
+        )
+        # shift centroid to account for padding
+        x += left
+        y += top
+
+    # now crop exactly w×h around (x, y)
+    x0, y0 = x - half_w, y - half_h
+    x1, y1 = x0 + w, y0 + h
+    return image[y0:y1, x0:x1]
 
 
 def crop_video(
@@ -87,6 +84,8 @@ def crop_video(
     crop_size: Union[int, Tuple[int, int]],
     quality: int = 5,
     constrain_track: Optional[bool] = False,
+    border_mode: int = cv2.BORDER_REFLECT,
+    border_value: Union[int, Tuple[int, int, int]] = 0,
 ) -> None:
     """Crop a video around a time-varying centroid.
 
@@ -97,6 +96,8 @@ def crop_video(
         crop_size: Size of the crop. If an integer is provided, it crops a square of that size.
         quality: Quality of the output video passed to ``imageio.get_writer``.
         constrain_track: If ``True``, ensures the cropped area does not exceed the video boundaries.
+        border_mode: OpenCV border mode for padding (e.g., cv2.BORDER_REFLECT).
+        border_value: Value for BORDER_CONSTANT; scalar or tuple for multi-channel images.
     """
     reader = OpenCVReader(video_path)
 
@@ -114,7 +115,7 @@ def crop_video(
         for frame_ix in tqdm.trange(len(reader)):
             frame = reader[frame_ix]
             cen = track[frame_ix]
-            cropped_frame = crop_image(frame, cen, crop_size)
+            cropped_frame = crop_image(frame, cen, crop_size, border_mode, border_value)
             writer.append_data(cropped_frame)
 
 
@@ -227,7 +228,7 @@ def load_video_clip(path: str, start: int, end: int) -> np.ndarray:
         Video as array of frames.
     """
     reader = OpenCVReader(path)
-    clip = reader[start : end]
+    clip = reader[start:end]
     return np.stack(clip)
 
 
@@ -258,29 +259,9 @@ def downsample_video(
     return video_array
 
 
-def center_crop(video_array: np.ndarray, crop_size: int) -> np.ndarray:
-    """Crop video around its center (fast method that uses slicing).
-
-    Args:
-        video_array: Video as array of frames.
-        crop_size: Size of the crop.
-
-    Note:
-        If the video is smaller than crop_size, it will not be cropped.
-
-    Returns:
-        Center-cropped video.
-    """
-    h, w = video_array.shape[1:3]
-    if h > crop_size:
-        video_array = video_array[:, (h - crop_size) // 2 : -(h - crop_size) // 2]
-    if w > crop_size:
-        video_array = video_array[:, :, (w - crop_size) // 2 : -(w - crop_size) // 2]
-    return video_array
-
-
 class EmbeddingStore:
     """Store for video embeddings and associated metadata."""
+
     REQUIRED_METADATA = {"video_path", "start_frame", "end_frame"}
 
     def __init__(self, embeddings: np.ndarray, metadata: pd.DataFrame):
@@ -304,9 +285,7 @@ class EmbeddingStore:
         # Check required metadata columns
         missing = self.REQUIRED_METADATA - set(self.metadata.columns)
         if missing:
-            raise ValueError(
-                f"Metadata is missing required columns: {sorted(missing)}"
-            )
+            raise ValueError(f"Metadata is missing required columns: {sorted(missing)}")
 
     def save(self, path: str):
         """Save embeddings and metadata to an HDF5 file. Overwrites any existing file."""
@@ -319,13 +298,16 @@ class EmbeddingStore:
                 data = self.metadata[col].values
                 if np.issubdtype(data.dtype, np.str_) or data.dtype == object:
                     data = data.astype(object)
-                    dt = h5py.string_dtype(encoding='utf-8')
-                elif np.issubdtype(data.dtype, np.number) or np.issubdtype(data.dtype, np.bool_):
+                    dt = h5py.string_dtype(encoding="utf-8")
+                elif np.issubdtype(data.dtype, np.number) or np.issubdtype(
+                    data.dtype, np.bool_
+                ):
                     dt = data.dtype
                 else:
-                    raise TypeError(f"Unsupported dtype in column '{col}': {data.dtype}")
+                    raise TypeError(
+                        f"Unsupported dtype in column '{col}': {data.dtype}"
+                    )
                 meta_grp.create_dataset(col, data=data, dtype=dt)
-
 
     def __len__(self) -> int:
         """Return the number of embeddings stored."""
@@ -334,7 +316,9 @@ class EmbeddingStore:
     def get_clip_info(self, index: int) -> Tuple[str, int, int]:
         """Get video clip info (path, start frame, end frame) at a given index."""
         if index < 0 or index >= len(self):
-            raise IndexError(f"Index {index} out of bounds for embeddings of length {len(self)}")
+            raise IndexError(
+                f"Index {index} out of bounds for embeddings of length {len(self)}"
+            )
         row = self.metadata.iloc[index]
         return row["video_path"], row["start_frame"], row["end_frame"]
 
@@ -342,22 +326,29 @@ class EmbeddingStore:
     def load(cls, path: str):
         """Load embeddings and metadata from an HDF5 file and return an EmbeddingData instance."""
         with h5py.File(path, "r") as f:
-            embeddings = f["embeddings"][:]
+            embeddings = f["embeddings"][()]
             meta_grp = f["metadata"]
-            metadata = pd.DataFrame({key: meta_grp[key][()] for key in meta_grp})
+            mdict = {}
+            for key in meta_grp:
+                dset = meta_grp[key]
+                if dset.dtype.kind in {"S", "O"}:
+                    mdict[key] = dset.asstr()[()]
+                else:
+                    mdict[key] = dset[()]
+            metadata = pd.DataFrame(mdict)
         return cls(embeddings, metadata)
 
 
 class VideoClipStreamer:
     """Stream video clips of specified duration and spacing (with optional cropping)."""
-    
+
     def __init__(
-        self, 
-        video_path: str, 
-        duration: int, 
+        self,
+        video_path: str,
+        duration: int,
         spacing: int = 1,
         crop_size: Optional[int] = None,
-        track: Optional[np.ndarray] = None
+        track: Optional[np.ndarray] = None,
     ):
         """
         Args:
@@ -372,10 +363,12 @@ class VideoClipStreamer:
         self.reader = OpenCVReader(video_path)
         self.frame_buffer = deque(maxlen=duration)
         self.crop_size = crop_size
-        
+
         if track is None:
             height, width = self.reader[0].shape[1:3]
-            self.track = np.array([[width // 2, height // 2]] * len(self.reader), dtype=int)
+            self.track = np.array(
+                [[width // 2, height // 2]] * len(self.reader), dtype=int
+            )
         else:
             self.track = track
 
@@ -393,7 +386,7 @@ class VideoClipStreamer:
             start_ix = current_ix - self.duration + 1
             if start_ix in self.start_frames:
                 yield np.stack(self.frame_buffer)
-                
+
     def __len__(self) -> int:
         """Return the number of clips that can be generated from the video."""
-        return (len(self.reader) - self.duration) // self.spacing
+        return len(self.start_frames)
